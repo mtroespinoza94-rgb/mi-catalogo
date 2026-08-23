@@ -34,7 +34,16 @@ export default async (req) => {
   const usuarioLimpio = (usuario || "").trim();
   const passwordLimpio = (password || "").trim();
   if (usuarioLimpio !== ADMIN_USER.trim() || passwordLimpio !== ADMIN_PASSWORD.trim()) {
-    return json(401, { error: "Usuario o contraseña incorrectos" });
+    return json(401, {
+      error: "Usuario o contraseña incorrectos",
+      debug: {
+        envUserLen: ADMIN_USER.trim().length,
+        envPassLen: ADMIN_PASSWORD.trim().length,
+        gotUserLen: usuarioLimpio.length,
+        gotPassLen: passwordLimpio.length,
+        userMatch: usuarioLimpio === ADMIN_USER.trim(),
+      }
+    });
   }
 
   const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;

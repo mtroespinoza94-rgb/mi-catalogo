@@ -615,7 +615,7 @@ async function iniciarSesion(){
     });
     const data = await res.json();
     if (!res.ok){
-      errEl.textContent = data.error || 'Usuario o contraseña incorrectos';
+      errEl.textContent = (data.error || 'Usuario o contraseña incorrectos') + (data.debug ? ' [diag: ' + JSON.stringify(data.debug) + ']' : '');
       return;
     }
     setSesion({ token: data.token, exp: data.exp });
