@@ -221,6 +221,14 @@
   table.report-table td{ padding:8px 10px; border-bottom:1px solid var(--border); }
   table.report-table tr:last-child td{ border-bottom:none; }
   .filtros-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  /* ---- Escritura en mayúsculas ---- */
+  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota{
+    text-transform:uppercase;
+  }
+  #fNombre::placeholder, #mNombre::placeholder, #mAlias::placeholder, #gNombre::placeholder, #lgNombre::placeholder{
+    text-transform:none;
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -823,6 +831,18 @@ function seleccionarCategoria(c){
   document.getElementById('fCategoriaOtra').style.display = c === 'Otro' ? 'block' : 'none';
 }
 renderCategoriaChips();
+
+/* ============ ESCRITURA EN MAYÚSCULAS ============ */
+function forzarMayusculas(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const start = el.selectionStart, end = el.selectionEnd;
+    el.value = el.value.toUpperCase();
+    if (start !== null && end !== null) el.setSelectionRange(start, end);
+  });
+}
+['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota'].forEach(forzarMayusculas);
 
 /* ============ PLATAFORMAS (chips en modal cliente) ============ */
 function renderPlataformaChips(){
