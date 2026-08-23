@@ -467,8 +467,13 @@
       <input type="tel" id="mTelefono" placeholder="Opcional">
     </div>
     <div class="field">
-      <label>Ubicación</label>
-      <input type="text" id="mUbicacion" placeholder="Ej. Escobedo, N.L.">
+      <label>Ubicación / lugar</label>
+      <div class="client-select">
+        <select id="mUbicacion">
+          <option value="">— Selecciona un lugar —</option>
+        </select>
+        <button class="btn small secondary" onclick="openNewLugarModal()">+ Nuevo</button>
+      </div>
     </div>
     <div class="field">
       <label>¿De qué plataforma es?</label>
@@ -486,6 +491,23 @@
       <button class="btn secondary" onclick="closeNewClientModal()">Cancelar</button>
       <button class="btn" onclick="guardarCliente()">Guardar cliente</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ MODAL NUEVO LUGAR ============ -->
+<div class="modal-overlay" id="modalLugar">
+  <div class="modal-sheet">
+    <h3>Nuevo lugar</h3>
+    <div class="field">
+      <label>Nombre del lugar</label>
+      <input type="text" id="lgNombre" placeholder="Ej. Escobedo, N.L.">
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn secondary" onclick="closeNewLugarModal()">Cancelar</button>
+      <button class="btn" onclick="guardarLugar()">Guardar lugar</button>
+    </div>
+    <div class="section-title">Lugares existentes</div>
+    <div id="listaLugaresAdmin" style="max-height:180px; overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -597,12 +619,13 @@ function loadPrefs(){
 function savePrefs(){ localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 
 let prefs = loadPrefs();
-let state = { clientes: [], grupos: [], ventas: [], abonos: [] };
+let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [] };
 let fotoBase64 = null;
 let categoriaSeleccionada = CATEGORIAS[0];
 let plataformaSeleccionada = 'instagram';
 let colorSeleccionado = COLORES_CLIENTE[0].id;
 let clienteDetalleId = null;
+let clienteEditandoId = null;
 let grupoFiltroActivo = '';
 let listenersActivos = [];
 let appIniciada = false;
@@ -835,6 +858,64 @@ async function guardarGrupo(){
 }
 function getGrupo(id){ return state.grupos.find(g=>g.id===id); }
 
+/* ============ LUGARES (ubicaciones de clientes) ============ */
+function renderLugarSelect(){
+  const sel = document.getElementById('mUbicacion');
+  if (!sel) return;
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Selecciona un lugar —</option>' +
+    state.lugares.map(l => `<option value="${l.nombre}">${l.nombre}</option>`).join('');
+  sel.value = actual;
+}
+function openNewLugarModal(){
+  document.getElementById('lgNombre').value = '';
+  renderListaLugaresAdmin();
+  document.getElementById('modalLugar').classList.add('show');
+  setTimeout(()=> document.getElementById('lgNombre').focus(), 100);
+}
+function closeNewLugarModal(){ document.getElementById('modalLugar').classList.remove('show'); }
+async function guardarLugar(){
+  const nombre = document.getElementById('lgNombre').value.trim();
+  if (!nombre){ showToast('⚠️ Ponle un nombre al lugar'); return; }
+  const existente = state.lugares.find(l => l.nombre.toLowerCase() === nombre.toLowerCase());
+  if (existente){ showToast('⚠️ Ese lugar ya existe'); return; }
+  try{
+    setSync('busy');
+    await db.collection('lugares').add({ nombre, fecha: new Date().toISOString() });
+    setSync('ok');
+    document.getElementById('lgNombre').value = '';
+    showToast(`✅ Lugar "${nombre}" agregado`);
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
+  }
+}
+function renderListaLugaresAdmin(){
+  const cont = document.getElementById('listaLugaresAdmin');
+  if (!cont) return;
+  if (state.lugares.length === 0){
+    cont.innerHTML = '<p style="color:var(--ink-soft); font-size:12.5px; padding:8px 0;">Aún no hay lugares guardados.</p>';
+    return;
+  }
+  cont.innerHTML = state.lugares.map(l => `
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border);">
+      <span style="font-size:13.5px;">${l.nombre}</span>
+      <button onclick="eliminarLugar('${l.id}')" style="background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; cursor:pointer;">Eliminar</button>
+    </div>
+  `).join('');
+}
+async function eliminarLugar(id){
+  try{
+    setSync('busy');
+    await db.collection('lugares').doc(id).delete();
+    setSync('ok');
+    showToast('🗑️ Lugar eliminado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo eliminar.');
+  }
+}
+
 /* ============ CLIENTES: selector en "Nueva venta" ============ */
 function renderClienteSelect(){
   const sel = document.getElementById('fCliente');
@@ -871,8 +952,9 @@ function marcarClienteReciente(id){
   savePrefs();
 }
 
-/* ============ MODAL NUEVO CLIENTE ============ */
+/* ============ MODAL NUEVO / EDITAR CLIENTE ============ */
 function openNewClientModal(){
+  clienteEditandoId = null;
   document.getElementById('modalClienteTitulo').textContent = 'Nuevo cliente';
   document.getElementById('mNombre').value = '';
   document.getElementById('mAlias').value = '';
@@ -883,6 +965,25 @@ function openNewClientModal(){
   colorSeleccionado = COLORES_CLIENTE[0].id;
   renderPlataformaChips();
   renderColorChips();
+  renderLugarSelect();
+  document.getElementById('modalCliente').classList.add('show');
+  setTimeout(()=> document.getElementById('mNombre').focus(), 100);
+}
+function openEditClientModal(id){
+  const c = state.clientes.find(x=>x.id===id);
+  if (!c) return;
+  clienteEditandoId = id;
+  document.getElementById('modalClienteTitulo').textContent = 'Editar cliente';
+  document.getElementById('mNombre').value = c.nombre || '';
+  document.getElementById('mAlias').value = c.alias || '';
+  document.getElementById('mTelefono').value = c.telefono || '';
+  document.getElementById('mNotas').value = c.notas || '';
+  plataformaSeleccionada = c.plataforma || 'instagram';
+  colorSeleccionado = c.color || COLORES_CLIENTE[0].id;
+  renderPlataformaChips();
+  renderColorChips();
+  renderLugarSelect();
+  document.getElementById('mUbicacion').value = c.ubicacion || '';
   document.getElementById('modalCliente').classList.add('show');
   setTimeout(()=> document.getElementById('mNombre').focus(), 100);
 }
@@ -891,23 +992,31 @@ function closeNewClientModal(){ document.getElementById('modalCliente').classLis
 async function guardarCliente(){
   const nombre = document.getElementById('mNombre').value.trim();
   if (!nombre){ showToast('⚠️ Ponle un nombre al cliente'); return; }
+  const datos = {
+    nombre,
+    alias: document.getElementById('mAlias').value.trim(),
+    telefono: document.getElementById('mTelefono').value.trim(),
+    ubicacion: document.getElementById('mUbicacion').value,
+    plataforma: plataformaSeleccionada,
+    color: colorSeleccionado,
+    notas: document.getElementById('mNotas').value.trim(),
+  };
   try{
     setSync('busy');
-    const ref = await db.collection('clientes').add({
-      nombre,
-      alias: document.getElementById('mAlias').value.trim(),
-      telefono: document.getElementById('mTelefono').value.trim(),
-      ubicacion: document.getElementById('mUbicacion').value.trim(),
-      plataforma: plataformaSeleccionada,
-      color: colorSeleccionado,
-      notas: document.getElementById('mNotas').value.trim(),
-      fecha: new Date().toISOString(),
-    });
-    setSync('ok');
-    document.getElementById('fCliente').value = ref.id;
-    marcarClienteReciente(ref.id);
-    closeNewClientModal();
-    showToast(`✅ Cliente "${nombre}" guardado`);
+    if (clienteEditandoId){
+      await db.collection('clientes').doc(clienteEditandoId).update(datos);
+      setSync('ok');
+      closeNewClientModal();
+      showToast(`✅ Cliente "${nombre}" actualizado`);
+      if (clienteDetalleId === clienteEditandoId) verDetalleCliente(clienteEditandoId, true);
+    } else {
+      const ref = await db.collection('clientes').add({ ...datos, fecha: new Date().toISOString() });
+      setSync('ok');
+      document.getElementById('fCliente').value = ref.id;
+      marcarClienteReciente(ref.id);
+      closeNewClientModal();
+      showToast(`✅ Cliente "${nombre}" guardado`);
+    }
   }catch(e){
     setSync('err');
     showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
@@ -1048,10 +1157,11 @@ function verDetalleCliente(id, mantenerPantalla){
     <div class="card">
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
         <div class="client-avatar" style="width:52px;height:52px;font-size:17px; background:${col.bg}; color:${col.hex};">${c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase()}</div>
-        <div>
+        <div style="flex:1;">
           <h3 style="margin:0; font-size:17px;">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${c.alias})</span>` : ''}</h3>
           <span class="platform-badge" style="background:${plat.bg}; color:${plat.color}">${plat.nombre}</span>
         </div>
+        <button class="btn secondary small" onclick="openEditClientModal('${c.id}')">Editar</button>
       </div>
       ${c.telefono ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📱 ${c.telefono}</div>` : ''}
       ${c.ubicacion ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📍 ${c.ubicacion}</div>` : ''}
@@ -1340,6 +1450,8 @@ function iniciarApp(){
     renderClienteSelect();
     renderClienteRecientesChips();
     renderGrupoSelect();
+    renderLugarSelect();
+    renderListaLugaresAdmin();
     const activa = document.querySelector('.screen.active');
     if (activa && activa.id === 'screenClientes') renderClientes();
     if (activa && activa.id === 'screenHistorial') renderHistorial();
@@ -1360,6 +1472,7 @@ function iniciarApp(){
   listenersActivos.push(suscribir('grupos', 'grupos'));
   listenersActivos.push(suscribir('ventas', 'ventas'));
   listenersActivos.push(suscribir('abonos', 'abonos'));
+  listenersActivos.push(suscribir('lugares', 'lugares'));
 }
 
 /* ============ PWA: registrar service worker ============ */
