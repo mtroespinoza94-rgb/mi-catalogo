@@ -240,6 +240,10 @@
       <label>Contraseña</label>
       <input type="password" id="lPassword" placeholder="••••••••" autocomplete="current-password" enterkeyhint="done">
     </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); margin:-6px 0 14px; cursor:pointer;">
+      <input type="checkbox" id="lRecordar" style="width:16px; height:16px; margin:0;" checked>
+      Recordar usuario
+    </label>
     <p class="login-error" id="loginError"></p>
     <button class="btn" id="btnLogin" onclick="iniciarSesion()">Entrar</button>
   </div>
@@ -556,6 +560,7 @@ const DEFAULT_IMPUESTO = 8.5;
 const DEFAULT_TIPO_CAMBIO = 18.50;
 const LS_PREFS = 'catalogo_prefs'; // solo preferencias locales (no datos), para arrancar rápido
 const LS_SESION = 'catalogo_sesion';
+const LS_USUARIO = 'catalogo_usuario_recordado';
 
 /* ============ SESIÓN / LOGIN ============ */
 function getSesion(){
@@ -572,7 +577,13 @@ function limpiarSesion(){ localStorage.removeItem(LS_SESION); }
 
 function mostrarLogin(){
   document.getElementById('loginOverlay').classList.remove('hide');
-  setTimeout(()=> document.getElementById('lUsuario').focus(), 100);
+  const usuarioGuardado = localStorage.getItem(LS_USUARIO);
+  if (usuarioGuardado){
+    document.getElementById('lUsuario').value = usuarioGuardado;
+    setTimeout(()=> document.getElementById('lPassword').focus(), 100);
+  } else {
+    setTimeout(()=> document.getElementById('lUsuario').focus(), 100);
+  }
 }
 function ocultarLogin(){
   document.getElementById('loginOverlay').classList.add('hide');
@@ -598,6 +609,11 @@ async function iniciarSesion(){
       return;
     }
     setSesion({ token: data.token, exp: data.exp });
+    if (document.getElementById('lRecordar').checked){
+      localStorage.setItem(LS_USUARIO, usuario);
+    } else {
+      localStorage.removeItem(LS_USUARIO);
+    }
     ocultarLogin();
     iniciarApp();
   }catch(e){
