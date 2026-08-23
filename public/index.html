@@ -290,13 +290,23 @@
       <input type="text" id="fNombre" placeholder="Ej. Decant Odyssey Aqua 10ml" enterkeyhint="next" autocomplete="off">
     </div>
 
+    <div class="field">
+      <label>Cantidad</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="cambiarCantidad(-1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">−</button>
+        <input type="number" id="fCantidad" value="1" min="1" step="1" inputmode="numeric" style="text-align:center; max-width:80px; font-weight:700;">
+        <button type="button" onclick="cambiarCantidad(1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">+</button>
+        <span style="font-size:12px; color:var(--ink-soft);">unidad(es) del mismo producto</span>
+      </div>
+    </div>
+
     <div class="two-col">
       <div class="field money">
-        <label>Costo (USD)</label>
+        <label>Costo por unidad (USD)</label>
         <input type="number" id="fCostoUSD" placeholder="0.00" step="0.01" inputmode="decimal" enterkeyhint="next">
       </div>
       <div class="field money">
-        <label>Precio de venta (MXN)</label>
+        <label>Precio por unidad (MXN)</label>
         <input type="number" id="fPrecioMXN" placeholder="0.00" step="0.01" inputmode="decimal" enterkeyhint="done">
       </div>
     </div>
@@ -323,7 +333,7 @@
       <span class="tag-value gold mono" id="tagImpuestoMonto">$0.00</span>
     </div>
     <div class="tag-row">
-      <span class="tag-label">Precio de venta</span>
+      <span class="tag-label">Precio de venta<span id="tagCantidadNota"></span></span>
       <span class="tag-value mono" id="tagVenta">$0.00</span>
     </div>
     <div class="tag-divider"></div>
@@ -789,21 +799,32 @@ document.getElementById('fotoInputCamara').addEventListener('change', (e)=> proc
 document.getElementById('fotoInputGaleria').addEventListener('change', (e)=> procesarFoto(e.target.files[0]));
 
 /* ============ CÁLCULO DE MARGEN EN VIVO (con impuesto) ============ */
+function cambiarCantidad(delta){
+  const input = document.getElementById('fCantidad');
+  const actual = parseInt(input.value) || 1;
+  input.value = Math.max(1, actual + delta);
+  actualizarTag();
+}
+
 function actualizarTag(){
   const costoUSD = parseFloat(document.getElementById('fCostoUSD').value) || 0;
   const tipoCambio = parseFloat(document.getElementById('fTipoCambio').value) || 0;
   const impuestoPct = parseFloat(document.getElementById('fImpuesto').value) || 0;
   const precioMXN = parseFloat(document.getElementById('fPrecioMXN').value) || 0;
+  const cantidad = Math.max(1, parseInt(document.getElementById('fCantidad').value) || 1);
 
-  const costoMXN = costoUSD * tipoCambio;
-  const impuestoMonto = costoMXN * (impuestoPct / 100);
-  const costoTotal = costoMXN + impuestoMonto;
-  const ganancia = precioMXN - costoTotal;
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const impuestoUnitMonto = costoUnitMXN * (impuestoPct / 100);
+  const costoMXN = (costoUnitMXN + impuestoUnitMonto) * cantidad;
+  const impuestoMonto = impuestoUnitMonto * cantidad;
+  const precioTotal = precioMXN * cantidad;
+  const ganancia = precioTotal - costoMXN;
 
-  document.getElementById('tagCostoMXN').textContent = fmtMXN(costoMXN);
+  document.getElementById('tagCostoMXN').textContent = fmtMXN(costoUnitMXN * cantidad);
   document.getElementById('tagImpuestoPct').textContent = impuestoPct;
   document.getElementById('tagImpuestoMonto').textContent = fmtMXN(impuestoMonto);
-  document.getElementById('tagVenta').textContent = fmtMXN(precioMXN);
+  document.getElementById('tagVenta').textContent = fmtMXN(precioTotal);
+  document.getElementById('tagCantidadNota').textContent = cantidad > 1 ? ` (${cantidad} uds.)` : '';
   const gEl = document.getElementById('tagGanancia');
   gEl.textContent = fmtMXN(ganancia);
   gEl.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
@@ -812,7 +833,7 @@ function actualizarTag(){
   prefs.impuesto = impuestoPct;
   savePrefs();
 }
-['fCostoUSD','fTipoCambio','fImpuesto','fPrecioMXN'].forEach(id=>{
+['fCostoUSD','fTipoCambio','fImpuesto','fPrecioMXN','fCantidad'].forEach(id=>{
   document.getElementById(id).addEventListener('input', actualizarTag);
 });
 
@@ -1067,6 +1088,7 @@ async function guardarVenta(){
   const tipoCambio = parseFloat(document.getElementById('fTipoCambio').value) || 0;
   const impuestoPct = parseFloat(document.getElementById('fImpuesto').value) || 0;
   const precioMXN = parseFloat(document.getElementById('fPrecioMXN').value) || 0;
+  const cantidad = Math.max(1, parseInt(document.getElementById('fCantidad').value) || 1);
   const clienteId = document.getElementById('fCliente').value;
   const grupoId = document.getElementById('fGrupo').value;
   const categoria = categoriaSeleccionada === 'Otro'
@@ -1077,10 +1099,12 @@ async function guardarVenta(){
   if (!clienteId){ showToast('⚠️ Selecciona a quién se lo vendes'); return; }
   if (!precioMXN){ showToast('⚠️ Falta el precio de venta'); return; }
 
-  const costoMXN = costoUSD * tipoCambio;
-  const impuestoMonto = costoMXN * (impuestoPct / 100);
-  const costoTotal = costoMXN + impuestoMonto;
-  const ganancia = precioMXN - costoTotal;
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const impuestoUnitMonto = costoUnitMXN * (impuestoPct / 100);
+  const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
+  const impuestoMonto = impuestoUnitMonto * cantidad;
+  const precioTotal = precioMXN * cantidad;
+  const ganancia = precioTotal - costoTotal;
 
   const btnGuardar = document.getElementById('btnGuardarVenta');
   btnGuardar.disabled = true;
@@ -1090,8 +1114,10 @@ async function guardarVenta(){
     setSync('busy');
     await db.collection('ventas').add({
       nombre, categoria, foto: fotoBase64 || null,
+      cantidad,
       costoUSD, tipoCambio, impuestoPct, impuestoMonto,
-      costoMXN: costoTotal, precioMXN, ganancia,
+      precioUnitarioMXN: precioMXN,
+      costoMXN: costoTotal, precioMXN: precioTotal, ganancia,
       clienteId, grupoId: grupoId || null,
       fecha: new Date().toISOString(),
     });
@@ -1114,6 +1140,7 @@ function limpiarFormulario(){
   document.getElementById('fNombre').value = '';
   document.getElementById('fCostoUSD').value = '';
   document.getElementById('fPrecioMXN').value = '';
+  document.getElementById('fCantidad').value = 1;
   document.getElementById('fTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
   renderGrupoSelect();
@@ -1239,7 +1266,7 @@ function verDetalleCliente(id, mantenerPantalla){
           <div class="order-item" onclick="abrirEditarVenta('${v.id}')" style="cursor:pointer;">
             ${v.foto ? `<img class="order-thumb" src="${v.foto}">` : `<div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>`}
             <div>
-              <div class="oi-name">${v.nombre}</div>
+              <div class="oi-name">${v.nombre}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
               <div class="oi-meta">${v.categoria}${v.grupoId && getGrupo(v.grupoId) ? ' · '+getGrupo(v.grupoId).nombre : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
             </div>
             <div class="oi-price">${fmtMXN(v.precioMXN)}</div>
@@ -1370,7 +1397,7 @@ function renderHistorial(){
       <div class="order-item" onclick="abrirEditarVenta('${v.id}')" style="cursor:pointer;">
         ${v.foto ? `<img class="order-thumb" src="${v.foto}">` : `<div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>`}
         <div>
-          <div class="oi-name">${v.nombre}</div>
+          <div class="oi-name">${v.nombre}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
           <div class="oi-meta">${c ? c.nombre : 'Cliente eliminado'}${g ? ' · '+g.nombre : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short'})}</div>
         </div>
         <div class="oi-price">${fmtMXN(v.precioMXN)}<div style="font-size:10.5px; color:var(--profit); font-weight:600;">+${fmtMXN(v.ganancia)}</div></div>
@@ -1457,13 +1484,14 @@ function renderReportes(){
     return;
   }
   tabla.innerHTML = `
-    <tr><th>Fecha</th><th>Producto</th><th>Cliente</th><th>Lugar</th><th>Categoría</th><th>Grupo</th><th>Precio</th><th>Ganancia</th></tr>
+    <tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Cliente</th><th>Lugar</th><th>Categoría</th><th>Grupo</th><th>Precio</th><th>Ganancia</th></tr>
     ${ventas.map(v=>{
       const c = state.clientes.find(x=>x.id===v.clienteId);
       const g = v.grupoId ? getGrupo(v.grupoId) : null;
       return `<tr>
         <td>${new Date(v.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}</td>
         <td>${v.nombre}</td>
+        <td>${v.cantidad || 1}</td>
         <td>${c ? c.nombre : '—'}</td>
         <td>${c && c.ubicacion ? c.ubicacion : '—'}</td>
         <td>${v.categoria || '—'}</td>
@@ -1484,6 +1512,7 @@ function exportarExcel(){
     return {
       'Fecha': new Date(v.fecha).toLocaleDateString('es-MX'),
       'Producto': v.nombre,
+      'Cantidad': v.cantidad || 1,
       'Categoría': v.categoria || '',
       'Cliente': c ? c.nombre : '',
       'Alias': c ? c.alias : '',
