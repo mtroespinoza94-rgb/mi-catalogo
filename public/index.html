@@ -238,7 +238,10 @@
     </div>
     <div class="field">
       <label>Contraseña</label>
-      <input type="password" id="lPassword" placeholder="••••••••" autocomplete="current-password" enterkeyhint="done">
+      <div style="position:relative;">
+        <input type="password" id="lPassword" placeholder="••••••••" autocomplete="off" enterkeyhint="done" style="padding-right:52px;">
+        <button type="button" onclick="togglePasswordVisibility()" style="position:absolute; right:4px; top:4px; bottom:4px; background:none; border:none; color:var(--ink-soft); font-size:12px; font-weight:600; cursor:pointer; padding:0 10px;">Ver</button>
+      </div>
     </div>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); margin:-6px 0 14px; cursor:pointer;">
       <input type="checkbox" id="lRecordar" style="width:16px; height:16px; margin:0;" checked>
@@ -589,9 +592,16 @@ function ocultarLogin(){
   document.getElementById('loginOverlay').classList.add('hide');
 }
 
+function togglePasswordVisibility(){
+  const input = document.getElementById('lPassword');
+  const btn = event.target;
+  if (input.type === 'password'){ input.type = 'text'; btn.textContent = 'Ocultar'; }
+  else { input.type = 'password'; btn.textContent = 'Ver'; }
+}
+
 async function iniciarSesion(){
   const usuario = document.getElementById('lUsuario').value.trim();
-  const password = document.getElementById('lPassword').value;
+  const password = document.getElementById('lPassword').value.trim();
   const errEl = document.getElementById('loginError');
   const btn = document.getElementById('btnLogin');
   errEl.textContent = '';

@@ -31,13 +31,15 @@ export default async (req) => {
   }
 
   const { usuario, password } = body || {};
-  if (usuario !== ADMIN_USER || password !== ADMIN_PASSWORD) {
+  const usuarioLimpio = (usuario || "").trim();
+  const passwordLimpio = (password || "").trim();
+  if (usuarioLimpio !== ADMIN_USER.trim() || passwordLimpio !== ADMIN_PASSWORD.trim()) {
     return json(401, { error: "Usuario o contraseña incorrectos" });
   }
 
   const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
   const exp = Date.now() + SIETE_DIAS_MS;
-  const token = sign({ u: usuario, exp }, SECRET);
+  const token = sign({ u: usuarioLimpio, exp }, SECRET);
 
   return json(200, { token, exp });
 };
