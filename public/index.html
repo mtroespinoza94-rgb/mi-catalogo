@@ -223,6 +223,9 @@
   .filtros-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -537,11 +540,29 @@
 
 <script>
 /* ======================================================
-   ESTADO Y SINCRONIZACIÓN EN LÍNEA
-   Los datos viven en una base de datos (Postgres en Netlify),
-   así que se sincronizan automáticamente entre tu celular,
-   tu compu, o cualquier dispositivo donde abras esta misma URL.
+   FIREBASE — autenticación y base de datos en tiempo real
 ====================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAjs6kr8MNtkSMk2u-Cp1koRw8iPECGuWI",
+  authDomain: "mi-catalogo-5b581.firebaseapp.com",
+  projectId: "mi-catalogo-5b581",
+  storageBucket: "mi-catalogo-5b581.firebasestorage.app",
+  messagingSenderId: "148517202851",
+  appId: "1:148517202851:web:9f7a193ca05f7490b0c816"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// El login de la app usa "usuario" simple (como admin) por comodidad,
+// pero Firebase Auth internamente necesita un correo. Se traduce aquí.
+const DOMINIO_USUARIOS = 'micatalogo.com';
+function usuarioAEmail(usuario){
+  const u = (usuario || '').trim().toLowerCase();
+  return u.includes('@') ? u : `${u}@${DOMINIO_USUARIOS}`;
+}
+
 const CATEGORIAS = ['Perfumes', 'Ropa', 'Accesorios', 'Electrónica', 'Otro'];
 const PLATAFORMAS = [
   {id:'instagram', nombre:'Instagram', color:'#C13584', bg:'#FCE8F3'},
@@ -561,84 +582,10 @@ const COLORES_CLIENTE = [
 ];
 const DEFAULT_IMPUESTO = 8.5;
 const DEFAULT_TIPO_CAMBIO = 18.50;
-const LS_PREFS = 'catalogo_prefs'; // solo preferencias locales (no datos), para arrancar rápido
-const LS_SESION = 'catalogo_sesion';
+const LS_PREFS = 'catalogo_prefs';
 const LS_USUARIO = 'catalogo_usuario_recordado';
-
-/* ============ SESIÓN / LOGIN ============ */
-function getSesion(){
-  try{
-    const raw = localStorage.getItem(LS_SESION);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (!s.token || !s.exp || s.exp < Date.now()) return null;
-    return s;
-  }catch(e){ return null; }
-}
-function setSesion(s){ localStorage.setItem(LS_SESION, JSON.stringify(s)); }
-function limpiarSesion(){ localStorage.removeItem(LS_SESION); }
-
-function mostrarLogin(){
-  document.getElementById('loginOverlay').classList.remove('hide');
-  const usuarioGuardado = localStorage.getItem(LS_USUARIO);
-  if (usuarioGuardado){
-    document.getElementById('lUsuario').value = usuarioGuardado;
-    setTimeout(()=> document.getElementById('lPassword').focus(), 100);
-  } else {
-    setTimeout(()=> document.getElementById('lUsuario').focus(), 100);
-  }
-}
-function ocultarLogin(){
-  document.getElementById('loginOverlay').classList.add('hide');
-}
-
-function togglePasswordVisibility(){
-  const input = document.getElementById('lPassword');
-  const btn = event.target;
-  if (input.type === 'password'){ input.type = 'text'; btn.textContent = 'Ocultar'; }
-  else { input.type = 'password'; btn.textContent = 'Ver'; }
-}
-
-async function iniciarSesion(){
-  const usuario = document.getElementById('lUsuario').value.trim();
-  const password = document.getElementById('lPassword').value.trim();
-  const errEl = document.getElementById('loginError');
-  const btn = document.getElementById('btnLogin');
-  errEl.textContent = '';
-  if (!usuario || !password){ errEl.textContent = 'Ingresa usuario y contraseña'; return; }
-  btn.disabled = true; btn.textContent = 'Entrando...';
-  try{
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario, password }),
-    });
-    const data = await res.json();
-    if (!res.ok){
-      errEl.textContent = (data.error || 'Usuario o contraseña incorrectos') + (data.debug ? ' [diag: ' + JSON.stringify(data.debug) + ']' : '');
-      return;
-    }
-    setSesion({ token: data.token, exp: data.exp });
-    if (document.getElementById('lRecordar').checked){
-      localStorage.setItem(LS_USUARIO, usuario);
-    } else {
-      localStorage.removeItem(LS_USUARIO);
-    }
-    ocultarLogin();
-    iniciarApp();
-  }catch(e){
-    errEl.textContent = 'No se pudo conectar. Revisa tu internet.';
-  }finally{
-    btn.disabled = false; btn.textContent = 'Entrar';
-  }
-}
-function cerrarSesion(){
-  limpiarSesion();
-  location.reload();
-}
-document.getElementById('lPassword').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') iniciarSesion(); });
-document.getElementById('lUsuario').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') document.getElementById('lPassword').focus(); });
-
+const LS_LOGIN_TS = 'catalogo_login_ts';
+const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function loadPrefs(){
   try{
@@ -657,12 +604,8 @@ let plataformaSeleccionada = 'instagram';
 let colorSeleccionado = COLORES_CLIENTE[0].id;
 let clienteDetalleId = null;
 let grupoFiltroActivo = '';
-
-/* ============ CONVERSIÓN snake_case (API) -> camelCase (app) ============ */
-function normCliente(r){ return { id:r.id, nombre:r.nombre, alias:r.alias||'', telefono:r.telefono||'', ubicacion:r.ubicacion||'', plataforma:r.plataforma||'otro', color:r.color||'verde', notas:r.notas||'', fecha:r.fecha }; }
-function normGrupo(r){ return { id:r.id, nombre:r.nombre, fecha:r.fecha }; }
-function normVenta(r){ return { id:r.id, nombre:r.nombre, categoria:r.categoria, foto:r.foto, costoUSD:Number(r.costo_usd), tipoCambio:Number(r.tipo_cambio), impuestoPct:Number(r.impuesto_pct), impuestoMonto:Number(r.impuesto_monto), costoMXN:Number(r.costo_mxn), precioMXN:Number(r.precio_mxn), ganancia:Number(r.ganancia), clienteId:r.cliente_id, grupoId:r.grupo_id, fecha:r.fecha }; }
-function normAbono(r){ return { id:r.id, clienteId:r.cliente_id, monto:Number(r.monto), nota:r.nota||'', fecha:r.fecha }; }
+let listenersActivos = [];
+let appIniciada = false;
 
 /* ============ INDICADOR DE SINCRONIZACIÓN ============ */
 function setSync(mode){
@@ -671,51 +614,76 @@ function setSync(mode){
   dot.className = 'sync-dot' + (mode ? ' ' + mode : '');
 }
 
-/* ============ API ============ */
-async function apiGet(path){
-  const sesion = getSesion();
-  if (!sesion) { mostrarLogin(); throw new Error('Sin sesión'); }
-  const res = await fetch('/api/data/' + path, {
-    headers: { 'Authorization': 'Bearer ' + sesion.token },
-  });
-  if (res.status === 401){ limpiarSesion(); mostrarLogin(); throw new Error('Sesión expirada'); }
-  if (!res.ok) throw new Error('Error de red');
-  return res.json();
-}
-async function apiPost(path, body){
-  const sesion = getSesion();
-  if (!sesion) { mostrarLogin(); throw new Error('Sin sesión'); }
-  const res = await fetch('/api/data/' + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token },
-    body: JSON.stringify(body),
-  });
-  if (res.status === 401){ limpiarSesion(); mostrarLogin(); throw new Error('Sesión expirada'); }
-  if (!res.ok) throw new Error('Error de red');
-  return res.json();
+/* ============ SESIÓN ============ */
+function togglePasswordVisibility(){
+  const input = document.getElementById('lPassword');
+  const btn = event.target;
+  if (input.type === 'password'){ input.type = 'text'; btn.textContent = 'Ocultar'; }
+  else { input.type = 'password'; btn.textContent = 'Ver'; }
 }
 
-async function cargarEstado(silencioso){
-  if (!silencioso) setSync('busy');
-  try{
-    const data = await apiGet('estado');
-    state.clientes = (data.clientes || []).map(normCliente);
-    state.grupos = (data.grupos || []).map(normGrupo);
-    state.ventas = (data.ventas || []).map(normVenta);
-    state.abonos = (data.abonos || []).map(normAbono);
-    setSync('ok');
-    renderClienteSelect();
-    renderClienteRecientesChips();
-    renderGrupoSelect();
-    const activa = document.querySelector('.screen.active');
-    if (activa && activa.id === 'screenClientes') renderClientes();
-    if (activa && activa.id === 'screenHistorial') renderHistorial();
-    if (activa && activa.id === 'screenReportes') renderReportes();
-    if (activa && activa.id === 'screenDetalleCliente' && clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
-  }catch(e){
-    setSync('err');
+function mostrarLogin(){
+  document.getElementById('loginOverlay').classList.remove('hide');
+  const usuarioGuardado = localStorage.getItem(LS_USUARIO);
+  if (usuarioGuardado){
+    document.getElementById('lUsuario').value = usuarioGuardado;
+    setTimeout(()=> document.getElementById('lPassword').focus(), 100);
+  } else {
+    setTimeout(()=> document.getElementById('lUsuario').focus(), 100);
   }
 }
+function ocultarLogin(){
+  document.getElementById('loginOverlay').classList.add('hide');
+}
+
+async function iniciarSesion(){
+  const usuario = document.getElementById('lUsuario').value.trim();
+  const password = document.getElementById('lPassword').value.trim();
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('btnLogin');
+  errEl.textContent = '';
+  if (!usuario || !password){ errEl.textContent = 'Ingresa usuario y contraseña'; return; }
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try{
+    await auth.signInWithEmailAndPassword(usuarioAEmail(usuario), password);
+    localStorage.setItem(LS_LOGIN_TS, String(Date.now()));
+    if (document.getElementById('lRecordar').checked){
+      localStorage.setItem(LS_USUARIO, usuario);
+    } else {
+      localStorage.removeItem(LS_USUARIO);
+    }
+    // onAuthStateChanged se encarga de ocultar el login e iniciar la app
+  }catch(e){
+    errEl.textContent = 'Usuario o contraseña incorrectos';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+function cerrarSesion(){
+  localStorage.removeItem(LS_LOGIN_TS);
+  auth.signOut();
+}
+document.getElementById('lPassword').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') iniciarSesion(); });
+document.getElementById('lUsuario').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') document.getElementById('lPassword').focus(); });
+
+// Cierra sesión sola si pasó más de una semana desde el último login
+auth.onAuthStateChanged((user)=>{
+  if (user){
+    const ts = Number(localStorage.getItem(LS_LOGIN_TS) || 0);
+    if (ts && (Date.now() - ts > SIETE_DIAS_MS)){
+      cerrarSesion();
+      return;
+    }
+    if (!localStorage.getItem(LS_LOGIN_TS)) localStorage.setItem(LS_LOGIN_TS, String(Date.now()));
+    ocultarLogin();
+    if (!appIniciada){ appIniciada = true; iniciarApp(); }
+  } else {
+    listenersActivos.forEach(unsub => unsub());
+    listenersActivos = [];
+    appIniciada = false;
+    mostrarLogin();
+  }
+});
 
 /* ============ NAVEGACIÓN ============ */
 function goTo(screenId){
@@ -739,7 +707,6 @@ function goTo(screenId){
   if (screenId === 'screenHistorial') renderHistorial();
   if (screenId === 'screenReportes') renderReportes();
   if (screenId === 'screenNueva'){
-    // enfoca el nombre del producto de inmediato para registrar rápido
     setTimeout(()=> document.getElementById('fNombre').focus(), 50);
   }
 }
@@ -856,11 +823,9 @@ async function guardarGrupo(){
   if (!nombre){ showToast('⚠️ Ponle un nombre al grupo'); return; }
   try{
     setSync('busy');
-    const row = await apiPost('grupos', { nombre });
-    state.grupos.push(normGrupo(row));
+    const ref = await db.collection('grupos').add({ nombre, fecha: new Date().toISOString() });
     setSync('ok');
-    renderGrupoSelect();
-    document.getElementById('fGrupo').value = row.id;
+    document.getElementById('fGrupo').value = ref.id;
     closeNewGroupModal();
     showToast(`✅ Grupo "${nombre}" creado`);
   }catch(e){
@@ -879,7 +844,7 @@ function renderClienteSelect(){
   sel.value = actual;
 }
 
-/* ============ CHIPS DE CLIENTES RECIENTES (1 toque, sin abrir el select) ============ */
+/* ============ CHIPS DE CLIENTES RECIENTES ============ */
 function renderClienteRecientesChips(){
   const wrap = document.getElementById('clienteRecientesChips');
   if (!wrap) return;
@@ -926,10 +891,9 @@ function closeNewClientModal(){ document.getElementById('modalCliente').classLis
 async function guardarCliente(){
   const nombre = document.getElementById('mNombre').value.trim();
   if (!nombre){ showToast('⚠️ Ponle un nombre al cliente'); return; }
-  const btn = event ? event.target : null;
   try{
     setSync('busy');
-    const row = await apiPost('clientes', {
+    const ref = await db.collection('clientes').add({
       nombre,
       alias: document.getElementById('mAlias').value.trim(),
       telefono: document.getElementById('mTelefono').value.trim(),
@@ -937,13 +901,11 @@ async function guardarCliente(){
       plataforma: plataformaSeleccionada,
       color: colorSeleccionado,
       notas: document.getElementById('mNotas').value.trim(),
+      fecha: new Date().toISOString(),
     });
-    state.clientes.unshift(normCliente(row));
     setSync('ok');
-    renderClienteSelect();
-    document.getElementById('fCliente').value = row.id;
-    marcarClienteReciente(row.id);
-    renderClienteRecientesChips();
+    document.getElementById('fCliente').value = ref.id;
+    marcarClienteReciente(ref.id);
     closeNewClientModal();
     showToast(`✅ Cliente "${nombre}" guardado`);
   }catch(e){
@@ -980,13 +942,13 @@ async function guardarVenta(){
 
   try{
     setSync('busy');
-    const row = await apiPost('ventas', {
-      nombre, categoria, foto: fotoBase64,
+    await db.collection('ventas').add({
+      nombre, categoria, foto: fotoBase64 || null,
       costoUSD, tipoCambio, impuestoPct, impuestoMonto,
       costoMXN: costoTotal, precioMXN, ganancia,
       clienteId, grupoId: grupoId || null,
+      fecha: new Date().toISOString(),
     });
-    state.ventas.unshift(normVenta(row));
     prefs.grupoId = grupoId;
     marcarClienteReciente(clienteId);
     savePrefs();
@@ -1006,8 +968,6 @@ function limpiarFormulario(){
   document.getElementById('fNombre').value = '';
   document.getElementById('fCostoUSD').value = '';
   document.getElementById('fPrecioMXN').value = '';
-  // el cliente y el grupo SÍ se conservan: si estás registrando varias ventas
-  // seguidas para la misma persona, no tienes que volver a elegirla cada vez
   document.getElementById('fTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
   renderGrupoSelect();
@@ -1161,12 +1121,12 @@ async function guardarAbono(){
   if (monto <= 0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
   try{
     setSync('busy');
-    const row = await apiPost('abonos', {
+    await db.collection('abonos').add({
       clienteId: clienteDetalleId,
       monto,
       nota: document.getElementById('aNota').value.trim(),
+      fecha: new Date().toISOString(),
     });
-    state.abonos.unshift(normAbono(row));
     setSync('ok');
     closeAbonoModal();
     showToast(`✅ Abono de ${fmtMXN(monto)} registrado`);
@@ -1365,7 +1325,7 @@ function showToast(msg){
   toastTimer = setTimeout(()=> t.classList.remove('show'), 2600);
 }
 
-/* ============ INIT ============ */
+/* ============ INIT: escuchar Firestore en tiempo real ============ */
 function iniciarApp(){
   renderPlataformaChips();
   renderColorChips();
@@ -1374,19 +1334,32 @@ function iniciarApp(){
   actualizarTag();
   document.getElementById('fNombre').focus();
 
-  cargarEstado();
-  setInterval(()=> cargarEstado(true), 12000);
-  document.addEventListener('visibilitychange', ()=>{
-    if (document.visibilityState === 'visible') cargarEstado(true);
-  });
-}
+  setSync('busy');
 
-const sesionInicial = getSesion();
-if (sesionInicial){
-  ocultarLogin();
-  iniciarApp();
-} else {
-  mostrarLogin();
+  const refrescar = () => {
+    renderClienteSelect();
+    renderClienteRecientesChips();
+    renderGrupoSelect();
+    const activa = document.querySelector('.screen.active');
+    if (activa && activa.id === 'screenClientes') renderClientes();
+    if (activa && activa.id === 'screenHistorial') renderHistorial();
+    if (activa && activa.id === 'screenReportes') renderReportes();
+    if (activa && activa.id === 'screenDetalleCliente' && clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
+  };
+
+  const suscribir = (coleccion, campo) => db.collection(coleccion).onSnapshot(
+    (snap) => {
+      state[campo] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSync('ok');
+      refrescar();
+    },
+    (err) => { setSync('err'); }
+  );
+
+  listenersActivos.push(suscribir('clientes', 'clientes'));
+  listenersActivos.push(suscribir('grupos', 'grupos'));
+  listenersActivos.push(suscribir('ventas', 'ventas'));
+  listenersActivos.push(suscribir('abonos', 'abonos'));
 }
 
 /* ============ PWA: registrar service worker ============ */
