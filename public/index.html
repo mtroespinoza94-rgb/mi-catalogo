@@ -1186,8 +1186,9 @@ async function eliminarLugar(id){
 function renderClienteSelect(){
   const sel = document.getElementById('fCliente');
   const actual = sel.value;
+  const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   sel.innerHTML = '<option value="">— Selecciona un cliente —</option>' +
-    state.clientes.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
+    clientesOrdenados.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
   sel.value = actual;
 }
 
@@ -1500,7 +1501,8 @@ function abrirEditarVenta(id){
   ventaEditandoId = id;
   document.getElementById('ventaEditNombre').textContent = v.nombre;
   const sel = document.getElementById('vCliente');
-  sel.innerHTML = state.clientes.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
+  const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  sel.innerHTML = clientesOrdenados.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
   sel.value = v.clienteId;
   document.getElementById('vPrecio').value = v.precioMXN;
   document.getElementById('modalVenta').classList.add('show');
@@ -1679,8 +1681,9 @@ function renderHistorial(){
 function poblarSelectsReportes(){
   const rCliente = document.getElementById('rCliente');
   const actualC = rCliente.value;
+  const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   rCliente.innerHTML = '<option value="">Todos</option>' +
-    state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    clientesOrdenados.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
   rCliente.value = actualC;
 
   const rUbicacion = document.getElementById('rUbicacion');
