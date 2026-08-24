@@ -267,7 +267,7 @@
   <div style="display:flex; align-items:center; justify-content:space-between;">
     <div>
       <h1 id="topTitle">Mi Catálogo</h1>
-      <p id="topSub"><span class="sync-dot" id="syncDot"></span><span id="topSubText">Control de ventas y clientes</span></p>
+      <p id="topSub"><span class="sync-dot" id="syncDot"></span><span id="topSubText">Control de ventas y clientes</span> <span id="rolBadge" style="display:none; background:var(--gold-bg); color:var(--gold); font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; margin-left:4px;">👁 SOLO LECTURA</span></p>
     </div>
     <button id="btnLogout" onclick="cerrarSesion()" title="Cerrar sesión" style="background:none;border:none;color:#9FB0A9;font-size:11px;cursor:pointer;padding:4px 0;">Salir</button>
   </div>
@@ -351,7 +351,7 @@
         <select id="fCliente">
           <option value="">— Selecciona un cliente —</option>
         </select>
-        <button class="btn small secondary" onclick="openNewClientModal()">+ Nuevo</button>
+        <button class="btn small secondary" id="btnNuevoCliente" onclick="openNewClientModal()">+ Nuevo</button>
       </div>
     </div>
 
@@ -367,7 +367,7 @@
         <select id="fGrupo">
           <option value="">— Sin grupo —</option>
         </select>
-        <button class="btn small secondary" onclick="openNewGroupModal()">+ Nuevo</button>
+        <button class="btn small secondary" id="btnNuevoGrupo" onclick="openNewGroupModal()">+ Nuevo</button>
       </div>
     </div>
   </div>
@@ -397,6 +397,8 @@
 <div class="screen" id="screenHistorial">
   <div class="stat-row" id="statsHistorial"></div>
   <div class="chip-row" id="grupoFiltroChips"></div>
+  <div class="section-title" style="margin-top:6px;">Ordenar por</div>
+  <div class="chip-row" id="ordenHistorialChips"></div>
   <div id="listaHistorial"></div>
 </div>
 
@@ -490,7 +492,7 @@
         <select id="mUbicacion">
           <option value="">— Selecciona un lugar —</option>
         </select>
-        <button class="btn small secondary" onclick="openNewLugarModal()">+ Nuevo</button>
+        <button class="btn small secondary" id="btnNuevoLugar" onclick="openNewLugarModal()">+ Nuevo</button>
       </div>
     </div>
     <div class="field">
@@ -537,6 +539,10 @@
     <div class="field">
       <label>¿A quién se le vendió?</label>
       <select id="vCliente"></select>
+    </div>
+    <div class="field">
+      <label>Precio de venta total (MXN)</label>
+      <input type="number" id="vPrecio" step="0.01" inputmode="decimal">
     </div>
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button class="btn secondary" onclick="closeVentaModal()">Cancelar</button>
@@ -607,6 +613,11 @@ const firebaseConfig = {
   messagingSenderId: "148517202851",
   appId: "1:148517202851:web:9f7a193ca05f7490b0c816"
 };
+// UID fijo de la cuenta administradora principal (admin@micatalogo.com).
+// Cualquier otra cuenta que inicie sesión se registra automáticamente
+// como "visualizador" (solo puede ver, no modificar nada).
+const ADMIN_UID_FIJO = 'k2l6xDKwhcfl9sjfNytdQQd8ddZ2';
+let rolActual = 'visualizador';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -725,7 +736,7 @@ document.getElementById('lPassword').addEventListener('keydown', (e)=>{ if (e.ke
 document.getElementById('lUsuario').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') document.getElementById('lPassword').focus(); });
 
 // Cierra sesión sola si pasó más de una semana desde el último login
-auth.onAuthStateChanged((user)=>{
+auth.onAuthStateChanged(async (user)=>{
   if (user){
     const ts = Number(localStorage.getItem(LS_LOGIN_TS) || 0);
     if (ts && (Date.now() - ts > SIETE_DIAS_MS)){
@@ -733,6 +744,20 @@ auth.onAuthStateChanged((user)=>{
       return;
     }
     if (!localStorage.getItem(LS_LOGIN_TS)) localStorage.setItem(LS_LOGIN_TS, String(Date.now()));
+
+    try{
+      const ref = db.collection('usuarios').doc(user.uid);
+      const snap = await ref.get();
+      if (snap.exists){
+        rolActual = snap.data().rol || 'visualizador';
+      } else {
+        rolActual = (user.uid === ADMIN_UID_FIJO) ? 'admin' : 'visualizador';
+        await ref.set({ rol: rolActual, email: user.email || '', fecha: new Date().toISOString() });
+      }
+    }catch(e){
+      rolActual = 'visualizador';
+    }
+
     ocultarLogin();
     if (!appIniciada){ appIniciada = true; iniciarApp(); }
   } else {
@@ -742,6 +767,20 @@ auth.onAuthStateChanged((user)=>{
     mostrarLogin();
   }
 });
+
+/* ============ PERMISOS SEGÚN ROL ============ */
+function aplicarPermisosUI(){
+  const esAdmin = rolActual === 'admin';
+  const navNueva = document.querySelector('.nav-btn[data-screen="screenNueva"]');
+  if (navNueva) navNueva.style.display = esAdmin ? '' : 'none';
+  ['btnNuevoCliente','btnNuevoGrupo','btnNuevoLugar'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.style.display = esAdmin ? '' : 'none';
+  });
+  const badge = document.getElementById('rolBadge');
+  if (badge) badge.style.display = esAdmin ? 'none' : 'inline';
+  if (!esAdmin) goTo('screenHistorial');
+}
 
 /* ============ NAVEGACIÓN ============ */
 function goTo(screenId){
@@ -893,13 +932,19 @@ function renderGrupoSelect(){
     state.grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
   sel.value = actual;
 }
+function soloAdmin(){
+  if (rolActual !== 'admin'){ showToast('👁 Modo visualizador: no puedes hacer cambios'); return true; }
+  return false;
+}
 function openNewGroupModal(){
+  if (soloAdmin()) return;
   document.getElementById('gNombre').value = '';
   document.getElementById('modalGrupo').classList.add('show');
   setTimeout(()=> document.getElementById('gNombre').focus(), 100);
 }
 function closeNewGroupModal(){ document.getElementById('modalGrupo').classList.remove('show'); }
 async function guardarGrupo(){
+  if (soloAdmin()) return;
   const nombre = document.getElementById('gNombre').value.trim();
   if (!nombre){ showToast('⚠️ Ponle un nombre al grupo'); return; }
   try{
@@ -926,6 +971,7 @@ function renderLugarSelect(){
   sel.value = actual;
 }
 function openNewLugarModal(){
+  if (soloAdmin()) return;
   document.getElementById('lgNombre').value = '';
   renderListaLugaresAdmin();
   document.getElementById('modalLugar').classList.add('show');
@@ -933,6 +979,7 @@ function openNewLugarModal(){
 }
 function closeNewLugarModal(){ document.getElementById('modalLugar').classList.remove('show'); }
 async function guardarLugar(){
+  if (soloAdmin()) return;
   const nombre = document.getElementById('lgNombre').value.trim();
   if (!nombre){ showToast('⚠️ Ponle un nombre al lugar'); return; }
   const existente = state.lugares.find(l => l.nombre.toLowerCase() === nombre.toLowerCase());
@@ -963,6 +1010,7 @@ function renderListaLugaresAdmin(){
   `).join('');
 }
 async function eliminarLugar(id){
+  if (soloAdmin()) return;
   try{
     setSync('busy');
     await db.collection('lugares').doc(id).delete();
@@ -1012,6 +1060,7 @@ function marcarClienteReciente(id){
 
 /* ============ MODAL NUEVO / EDITAR CLIENTE ============ */
 function openNewClientModal(){
+  if (soloAdmin()) return;
   clienteEditandoId = null;
   document.getElementById('modalClienteTitulo').textContent = 'Nuevo cliente';
   document.getElementById('mNombre').value = '';
@@ -1028,6 +1077,7 @@ function openNewClientModal(){
   setTimeout(()=> document.getElementById('mNombre').focus(), 100);
 }
 function openEditClientModal(id){
+  if (soloAdmin()) return;
   const c = state.clientes.find(x=>x.id===id);
   if (!c) return;
   clienteEditandoId = id;
@@ -1048,6 +1098,7 @@ function openEditClientModal(id){
 function closeNewClientModal(){ document.getElementById('modalCliente').classList.remove('show'); }
 
 async function guardarCliente(){
+  if (soloAdmin()) return;
   const nombre = document.getElementById('mNombre').value.trim();
   if (!nombre){ showToast('⚠️ Ponle un nombre al cliente'); return; }
   const datos = {
@@ -1083,6 +1134,7 @@ async function guardarCliente(){
 
 /* ============ GUARDAR VENTA ============ */
 async function guardarVenta(){
+  if (soloAdmin()) return;
   const nombre = document.getElementById('fNombre').value.trim();
   const costoUSD = parseFloat(document.getElementById('fCostoUSD').value) || 0;
   const tipoCambio = parseFloat(document.getElementById('fTipoCambio').value) || 0;
@@ -1181,7 +1233,7 @@ function renderClientes(){
     const total = ventasCliente.reduce((s,v)=>s+v.precioMXN,0);
     const abonado = state.abonos.filter(a=>a.clienteId===c.id).reduce((s,a)=>s+a.monto,0);
     return {...c, total, numVentas: ventasCliente.length, saldo: total - abonado};
-  }).sort((a,b)=>b.saldo-a.saldo || b.total-a.total);
+  }).sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
 
   cont.innerHTML = clientes.map(c=>{
     const plat = getPlataforma(c.plataforma);
@@ -1225,7 +1277,7 @@ function verDetalleCliente(id, mantenerPantalla){
           <h3 style="margin:0; font-size:17px;">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${c.alias})</span>` : ''}</h3>
           <span class="platform-badge" style="background:${plat.bg}; color:${plat.color}">${plat.nombre}</span>
         </div>
-        <button class="btn secondary small" onclick="openEditClientModal('${c.id}')">Editar</button>
+        ${rolActual === 'admin' ? `<button class="btn secondary small" onclick="openEditClientModal('${c.id}')">Editar</button>` : ''}
       </div>
       ${c.telefono ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📱 ${c.telefono}</div>` : ''}
       ${c.ubicacion ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📍 ${c.ubicacion}</div>` : ''}
@@ -1241,7 +1293,7 @@ function verDetalleCliente(id, mantenerPantalla){
       <div class="stat-box"><div class="lbl">Productos</div><div class="val">${ventas.length}</div></div>
     </div>
 
-    <button class="btn" onclick="openAbonoModal('${c.id}')">+ Registrar abono</button>
+    ${rolActual === 'admin' ? `<button class="btn" onclick="openAbonoModal('${c.id}')">+ Registrar abono</button>` : ''}
 
     <div class="section-title">Abonos registrados</div>
     <div class="card" style="padding:6px 16px;">
@@ -1282,6 +1334,7 @@ function verDetalleCliente(id, mantenerPantalla){
 /* ============ EDITAR / ELIMINAR VENTA ============ */
 let ventaEditandoId = null;
 function abrirEditarVenta(id){
+  if (soloAdmin()) return;
   const v = state.ventas.find(x=>x.id===id);
   if (!v) return;
   ventaEditandoId = id;
@@ -1289,15 +1342,41 @@ function abrirEditarVenta(id){
   const sel = document.getElementById('vCliente');
   sel.innerHTML = state.clientes.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
   sel.value = v.clienteId;
+  document.getElementById('vPrecio').value = v.precioMXN;
   document.getElementById('modalVenta').classList.add('show');
 }
 function closeVentaModal(){ document.getElementById('modalVenta').classList.remove('show'); ventaEditandoId = null; }
 async function guardarEdicionVenta(){
+  if (soloAdmin()) return;
   if (!ventaEditandoId) return;
+  const v = state.ventas.find(x=>x.id===ventaEditandoId);
+  if (!v) return;
   const nuevoClienteId = document.getElementById('vCliente').value;
+  const nuevoPrecio = parseFloat(document.getElementById('vPrecio').value) || 0;
+
+  const cambiaCliente = nuevoClienteId !== v.clienteId;
+  const cambiaPrecio = Math.abs(nuevoPrecio - v.precioMXN) > 0.005;
+
+  if (!cambiaCliente && !cambiaPrecio){ closeVentaModal(); return; }
+
+  const clienteNuevo = state.clientes.find(c=>c.id===nuevoClienteId);
+  const clienteViejo = state.clientes.find(c=>c.id===v.clienteId);
+  let mensaje = '¿Confirmas guardar estos cambios?\n';
+  if (cambiaCliente) mensaje += `\n• Cliente: ${clienteViejo ? clienteViejo.nombre : '—'} → ${clienteNuevo ? clienteNuevo.nombre : '—'}`;
+  if (cambiaPrecio) mensaje += `\n• Precio: ${fmtMXN(v.precioMXN)} → ${fmtMXN(nuevoPrecio)}`;
+  if (!confirm(mensaje)) return;
+
+  const datos = {};
+  if (cambiaCliente) datos.clienteId = nuevoClienteId;
+  if (cambiaPrecio){
+    const nuevaGanancia = nuevoPrecio - (v.costoMXN || 0);
+    datos.precioMXN = nuevoPrecio;
+    datos.ganancia = nuevaGanancia;
+  }
+
   try{
     setSync('busy');
-    await db.collection('ventas').doc(ventaEditandoId).update({ clienteId: nuevoClienteId });
+    await db.collection('ventas').doc(ventaEditandoId).update(datos);
     setSync('ok');
     showToast('✅ Venta actualizada');
     closeVentaModal();
@@ -1308,8 +1387,10 @@ async function guardarEdicionVenta(){
   }
 }
 async function eliminarVenta(){
+  if (soloAdmin()) return;
   if (!ventaEditandoId) return;
   if (!confirm('¿Seguro que quieres eliminar esta venta? No se puede deshacer.')) return;
+  if (!confirm('Confirma otra vez: ¿ELIMINAR esta venta definitivamente?')) return;
   try{
     setSync('busy');
     await db.collection('ventas').doc(ventaEditandoId).delete();
@@ -1325,6 +1406,7 @@ async function eliminarVenta(){
 
 /* ============ ABONOS ============ */
 function openAbonoModal(clienteId){
+  if (soloAdmin()) return;
   clienteDetalleId = clienteId;
   const c = state.clientes.find(x=>x.id===clienteId);
   document.getElementById('abonoClienteNombre').textContent = c.nombre;
@@ -1335,6 +1417,7 @@ function openAbonoModal(clienteId){
 }
 function closeAbonoModal(){ document.getElementById('modalAbono').classList.remove('show'); }
 async function guardarAbono(){
+  if (soloAdmin()) return;
   const monto = parseFloat(document.getElementById('aMonto').value) || 0;
   if (monto <= 0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
   try{
@@ -1365,8 +1448,34 @@ function renderGrupoFiltroChips(){
 }
 function seleccionarGrupoFiltro(id){ grupoFiltroActivo = id; renderHistorial(); }
 
+const OPCIONES_ORDEN = [
+  {id:'reciente', nombre:'Más reciente'},
+  {id:'precio_desc', nombre:'Precio: mayor a menor'},
+  {id:'precio_asc', nombre:'Precio: menor a mayor'},
+  {id:'cantidad', nombre:'Cantidad'},
+];
+let ordenHistorialActivo = 'reciente';
+function renderOrdenHistorialChips(){
+  const wrap = document.getElementById('ordenHistorialChips');
+  if (!wrap) return;
+  wrap.innerHTML = OPCIONES_ORDEN.map(o =>
+    `<div class="chip ${o.id===ordenHistorialActivo?'active':''}" onclick="seleccionarOrdenHistorial('${o.id}')">${o.nombre}</div>`
+  ).join('');
+}
+function seleccionarOrdenHistorial(id){ ordenHistorialActivo = id; renderHistorial(); }
+function ordenarVentas(lista){
+  const copia = [...lista];
+  switch(ordenHistorialActivo){
+    case 'precio_desc': return copia.sort((a,b)=> b.precioMXN - a.precioMXN);
+    case 'precio_asc': return copia.sort((a,b)=> a.precioMXN - b.precioMXN);
+    case 'cantidad': return copia.sort((a,b)=> (b.cantidad||1) - (a.cantidad||1));
+    default: return copia.sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  }
+}
+
 function renderHistorial(){
   renderGrupoFiltroChips();
+  renderOrdenHistorialChips();
 
   const ventasFiltradas = grupoFiltroActivo
     ? state.ventas.filter(v => v.grupoId === grupoFiltroActivo)
@@ -1380,7 +1489,7 @@ function renderHistorial(){
   `;
 
   const cont = document.getElementById('listaHistorial');
-  const ventas = [...ventasFiltradas].sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
+  const ventas = ordenarVentas(ventasFiltradas);
 
   if (ventas.length === 0){
     cont.innerHTML = `<div class="empty">
@@ -1547,12 +1656,13 @@ function showToast(msg){
 
 /* ============ INIT: escuchar Firestore en tiempo real ============ */
 function iniciarApp(){
+  aplicarPermisosUI();
   renderPlataformaChips();
   renderColorChips();
   document.getElementById('fTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
   actualizarTag();
-  document.getElementById('fNombre').focus();
+  if (rolActual === 'admin') document.getElementById('fNombre').focus();
 
   setSync('busy');
 
