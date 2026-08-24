@@ -223,10 +223,10 @@
   .filtros-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
   /* ---- Escritura en mayúsculas ---- */
-  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota{
+  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota, #buscarCliente, #vComentarios, #fComentarios{
     text-transform:uppercase;
   }
-  #fNombre::placeholder, #mNombre::placeholder, #mAlias::placeholder, #gNombre::placeholder, #lgNombre::placeholder{
+  #fNombre::placeholder, #mNombre::placeholder, #mAlias::placeholder, #gNombre::placeholder, #lgNombre::placeholder, #buscarCliente::placeholder{
     text-transform:none;
   }
 </style>
@@ -372,6 +372,11 @@
         </select>
         <button class="btn small secondary" id="btnNuevoGrupo" onclick="openNewGroupModal()">+ Nuevo</button>
       </div>
+    </div>
+
+    <div class="field">
+      <label>Comentarios (opcional)</label>
+      <textarea id="fComentarios" rows="2" placeholder="Ej. Pidió que se lo mandara a domicilio"></textarea>
     </div>
   </div>
 
@@ -568,21 +573,38 @@
 <!-- ============ MODAL EDITAR / ELIMINAR VENTA ============ -->
 <div class="modal-overlay" id="modalVenta">
   <div class="modal-sheet">
-    <h3>Editar venta</h3>
-    <p style="margin:-8px 0 14px; font-size:12.5px; color:var(--ink-soft);" id="ventaEditNombre"></p>
+    <h3 id="ventaEditTitulo">Detalle de la venta</h3>
+    <img id="ventaEditFoto" src="" style="display:none; width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px;">
+    <p style="margin:-4px 0 14px; font-size:12.5px; color:var(--ink-soft);" id="ventaEditMeta"></p>
+
     <div class="field">
       <label>¿A quién se le vendió?</label>
       <select id="vCliente"></select>
     </div>
-    <div class="field">
-      <label>Precio de venta total (MXN)</label>
-      <input type="number" id="vPrecio" step="0.01" inputmode="decimal">
+    <div class="two-col">
+      <div class="field money">
+        <label>Costo por unidad (USD)</label>
+        <input type="number" id="vCostoUSD" step="0.01" inputmode="decimal">
+      </div>
+      <div class="field money">
+        <label>Precio de venta total (MXN)</label>
+        <input type="number" id="vPrecio" step="0.01" inputmode="decimal">
+      </div>
     </div>
+    <div class="field">
+      <label>Comentarios de esta compra</label>
+      <textarea id="vComentarios" rows="2" placeholder="Sin comentarios"></textarea>
+    </div>
+    <div class="tag-row" style="margin:6px 0 14px;">
+      <span class="tag-label">Ganancia con estos valores</span>
+      <span class="tag-value mono" id="vGananciaPreview">$0.00</span>
+    </div>
+
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button class="btn secondary" onclick="closeVentaModal()">Cancelar</button>
-      <button class="btn" onclick="guardarEdicionVenta()">Guardar cambio</button>
+      <button class="btn" id="btnGuardarEdicionVenta" onclick="guardarEdicionVenta()">Guardar cambios</button>
     </div>
-    <button class="btn" style="background:var(--danger);" onclick="eliminarVenta()">🗑️ Eliminar esta venta</button>
+    <button class="btn" id="btnEliminarVenta" style="background:var(--danger);" onclick="eliminarVenta()">🗑️ Eliminar esta venta</button>
   </div>
 </div>
 
@@ -706,6 +728,7 @@ let plataformaSeleccionada = 'instagram';
 let colorSeleccionado = COLORES_CLIENTE[0].id;
 let clienteDetalleId = null;
 let clienteEditandoId = null;
+let clienteDetalleGrupoFiltro = '';
 let grupoFiltroActivo = '';
 let listenersActivos = [];
 let appIniciada = false;
@@ -1062,7 +1085,7 @@ function forzarMayusculas(id){
     if (start !== null && end !== null) el.setSelectionRange(start, end);
   });
 }
-['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota'].forEach(forzarMayusculas);
+['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','buscarCliente','vComentarios','fComentarios'].forEach(forzarMayusculas);
 
 /* ============ PLATAFORMAS (chips en modal cliente) ============ */
 function renderPlataformaChips(){
@@ -1307,6 +1330,7 @@ async function guardarVenta(){
   const categoria = categoriaSeleccionada === 'Otro'
     ? (document.getElementById('fCategoriaOtra').value.trim() || 'Otro')
     : categoriaSeleccionada;
+  const comentarios = document.getElementById('fComentarios').value.trim();
 
   if (!nombre){ showToast('⚠️ Falta el nombre del producto'); return; }
   if (!clienteId){ showToast('⚠️ Selecciona a quién se lo vendes'); return; }
@@ -1327,7 +1351,7 @@ async function guardarVenta(){
     setSync('busy');
     await db.collection('ventas').add({
       nombre, categoria, foto: fotoBase64 || null,
-      cantidad,
+      cantidad, comentarios,
       costoUSD, tipoCambio, impuestoPct, impuestoMonto,
       precioUnitarioMXN: precioMXN,
       costoMXN: costoTotal, precioMXN: precioTotal, ganancia,
@@ -1354,6 +1378,7 @@ function limpiarFormulario(){
   document.getElementById('fCostoUSD').value = '';
   document.getElementById('fPrecioMXN').value = '';
   document.getElementById('fCantidad').value = 1;
+  document.getElementById('fComentarios').value = '';
   document.getElementById('fTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
   renderGrupoSelect();
@@ -1417,17 +1442,33 @@ function renderClientes(){
 }
 
 /* ============ VISTA: DETALLE DE CLIENTE ============ */
+function seleccionarGrupoDetalleCliente(grupoId){
+  clienteDetalleGrupoFiltro = grupoId;
+  verDetalleCliente(clienteDetalleId, true);
+}
 function verDetalleCliente(id, mantenerPantalla){
   clienteDetalleId = id;
+  if (!mantenerPantalla) clienteDetalleGrupoFiltro = '';
   const c = state.clientes.find(x=>x.id===id);
   if (!c) return;
-  const ventas = state.ventas.filter(v=>v.clienteId===id).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
+  const todasLasVentas = state.ventas.filter(v=>v.clienteId===id).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
   const abonos = state.abonos.filter(a=>a.clienteId===id).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
-  const total = ventas.reduce((s,v)=>s+v.precioMXN,0);
+  const total = todasLasVentas.reduce((s,v)=>s+v.precioMXN,0);
   const totalAbonado = abonos.reduce((s,a)=>s+a.monto,0);
   const saldo = total - totalAbonado;
   const plat = getPlataforma(c.plataforma);
   const col = getColorCliente(c.color);
+
+  // Grupos en los que este cliente tiene compras, para el filtro
+  const gruposDelCliente = [...new Set(todasLasVentas.map(v=>v.grupoId).filter(Boolean))]
+    .map(gid => getGrupo(gid)).filter(Boolean);
+  if (clienteDetalleGrupoFiltro && !gruposDelCliente.some(g=>g.id===clienteDetalleGrupoFiltro)){
+    clienteDetalleGrupoFiltro = '';
+  }
+  const ventas = clienteDetalleGrupoFiltro
+    ? todasLasVentas.filter(v => v.grupoId === clienteDetalleGrupoFiltro)
+    : todasLasVentas;
+  const totalFiltrado = ventas.reduce((s,v)=>s+v.precioMXN,0);
 
   document.getElementById('screenDetalleCliente').innerHTML = `
     <button class="btn secondary small" style="margin-bottom:14px;" onclick="goTo('screenClientes')">← Volver a clientes</button>
@@ -1473,8 +1514,15 @@ function verDetalleCliente(id, mantenerPantalla){
     </div>
 
     <div class="section-title">Lo que le has vendido</div>
+    ${gruposDelCliente.length > 0 ? `
+      <div class="chip-row">
+        <div class="chip ${clienteDetalleGrupoFiltro===''?'active':''}" onclick="seleccionarGrupoDetalleCliente('')">Todos (${fmtMXN(total)})</div>
+        ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${g.nombre}</div>`).join('')}
+      </div>
+      ${clienteDetalleGrupoFiltro ? `<p style="font-size:12.5px; color:var(--ink-soft); margin:-4px 0 10px;">Total en este grupo: <strong>${fmtMXN(totalFiltrado)}</strong></p>` : ''}
+    ` : ''}
     <div class="card" style="padding:6px 16px;">
-      ${ventas.length === 0 ? '<p style="color:var(--ink-soft); font-size:13px; padding:12px 0;">Sin compras registradas todavía.</p>' :
+      ${ventas.length === 0 ? '<p style="color:var(--ink-soft); font-size:13px; padding:12px 0;">Sin compras registradas en esta vista.</p>' :
         ventas.map(v => `
           <div class="order-item" onclick="abrirEditarVenta('${v.id}')" style="cursor:pointer;">
             ${v.foto ? `<img class="order-thumb" src="${v.foto}">` : `<div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>`}
@@ -1495,45 +1543,105 @@ function verDetalleCliente(id, mantenerPantalla){
 /* ============ EDITAR / ELIMINAR VENTA ============ */
 let ventaEditandoId = null;
 function abrirEditarVenta(id){
-  if (soloAdmin()) return;
   const v = state.ventas.find(x=>x.id===id);
   if (!v) return;
   ventaEditandoId = id;
-  document.getElementById('ventaEditNombre').textContent = v.nombre;
+
+  const esAdmin = rolActual === 'admin';
+  document.getElementById('ventaEditTitulo').textContent = esAdmin ? 'Editar venta' : v.nombre;
+  const c = state.clientes.find(x=>x.id===v.clienteId);
+  const g = v.grupoId ? getGrupo(v.grupoId) : null;
+  document.getElementById('ventaEditMeta').textContent =
+    `${v.nombre} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'})}${g ? ' · '+g.nombre : ''}${v.cantidad>1 ? ' · x'+v.cantidad+' uds.' : ''}`;
+
+  const fotoEl = document.getElementById('ventaEditFoto');
+  if (v.foto){ fotoEl.src = v.foto; fotoEl.style.display = 'block'; }
+  else { fotoEl.style.display = 'none'; }
+
   const sel = document.getElementById('vCliente');
   const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
-  sel.innerHTML = clientesOrdenados.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
+  sel.innerHTML = clientesOrdenados.map(cl => `<option value="${cl.id}">${cl.alias ? cl.nombre+' ('+cl.alias+')' : cl.nombre}</option>`).join('');
   sel.value = v.clienteId;
+
+  document.getElementById('vCostoUSD').value = v.costoUSD || 0;
   document.getElementById('vPrecio').value = v.precioMXN;
+  document.getElementById('vComentarios').value = v.comentarios || '';
+
+  // Solo el admin puede modificar; el visualizador solo consulta
+  [sel, document.getElementById('vCostoUSD'), document.getElementById('vPrecio'), document.getElementById('vComentarios')]
+    .forEach(el => el.disabled = !esAdmin);
+  document.getElementById('btnGuardarEdicionVenta').style.display = esAdmin ? '' : 'none';
+  document.getElementById('btnEliminarVenta').style.display = esAdmin ? '' : 'none';
+
+  actualizarGananciaPreview(v);
   document.getElementById('modalVenta').classList.add('show');
 }
+function actualizarGananciaPreview(ventaOriginal){
+  const costoUSD = parseFloat(document.getElementById('vCostoUSD').value) || 0;
+  const precio = parseFloat(document.getElementById('vPrecio').value) || 0;
+  const tipoCambio = ventaOriginal.tipoCambio || DEFAULT_TIPO_CAMBIO;
+  const impuestoPct = ventaOriginal.impuestoPct || 0;
+  const cantidad = ventaOriginal.cantidad || 1;
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const costoTotal = (costoUnitMXN + costoUnitMXN * (impuestoPct/100)) * cantidad;
+  const ganancia = precio - costoTotal;
+  const el = document.getElementById('vGananciaPreview');
+  el.textContent = fmtMXN(ganancia);
+  el.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
+}
+document.getElementById('vCostoUSD').addEventListener('input', ()=>{
+  const v = state.ventas.find(x=>x.id===ventaEditandoId);
+  if (v) actualizarGananciaPreview(v);
+});
+document.getElementById('vPrecio').addEventListener('input', ()=>{
+  const v = state.ventas.find(x=>x.id===ventaEditandoId);
+  if (v) actualizarGananciaPreview(v);
+});
+
 function closeVentaModal(){ document.getElementById('modalVenta').classList.remove('show'); ventaEditandoId = null; }
+
 async function guardarEdicionVenta(){
   if (soloAdmin()) return;
   if (!ventaEditandoId) return;
   const v = state.ventas.find(x=>x.id===ventaEditandoId);
   if (!v) return;
   const nuevoClienteId = document.getElementById('vCliente').value;
+  const nuevoCostoUSD = parseFloat(document.getElementById('vCostoUSD').value) || 0;
   const nuevoPrecio = parseFloat(document.getElementById('vPrecio').value) || 0;
+  const nuevosComentarios = document.getElementById('vComentarios').value.trim();
 
   const cambiaCliente = nuevoClienteId !== v.clienteId;
+  const cambiaCosto = Math.abs(nuevoCostoUSD - (v.costoUSD || 0)) > 0.005;
   const cambiaPrecio = Math.abs(nuevoPrecio - v.precioMXN) > 0.005;
+  const cambiaComentarios = nuevosComentarios !== (v.comentarios || '');
 
-  if (!cambiaCliente && !cambiaPrecio){ closeVentaModal(); return; }
+  if (!cambiaCliente && !cambiaCosto && !cambiaPrecio && !cambiaComentarios){ closeVentaModal(); return; }
 
   const clienteNuevo = state.clientes.find(c=>c.id===nuevoClienteId);
   const clienteViejo = state.clientes.find(c=>c.id===v.clienteId);
   let mensaje = '¿Confirmas guardar estos cambios?\n';
   if (cambiaCliente) mensaje += `\n• Cliente: ${clienteViejo ? clienteViejo.nombre : '—'} → ${clienteNuevo ? clienteNuevo.nombre : '—'}`;
+  if (cambiaCosto) mensaje += `\n• Costo por unidad: $${(v.costoUSD||0).toFixed(2)} USD → $${nuevoCostoUSD.toFixed(2)} USD`;
   if (cambiaPrecio) mensaje += `\n• Precio: ${fmtMXN(v.precioMXN)} → ${fmtMXN(nuevoPrecio)}`;
+  if (cambiaComentarios) mensaje += `\n• Comentarios actualizados`;
   if (!confirm(mensaje)) return;
 
   const datos = {};
   if (cambiaCliente) datos.clienteId = nuevoClienteId;
-  if (cambiaPrecio){
-    const nuevaGanancia = nuevoPrecio - (v.costoMXN || 0);
+  if (cambiaComentarios) datos.comentarios = nuevosComentarios;
+  if (cambiaCosto || cambiaPrecio){
+    const cantidad = v.cantidad || 1;
+    const tipoCambio = v.tipoCambio || DEFAULT_TIPO_CAMBIO;
+    const impuestoPct = v.impuestoPct || 0;
+    const costoUnitMXN = nuevoCostoUSD * tipoCambio;
+    const impuestoUnitMonto = costoUnitMXN * (impuestoPct/100);
+    const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
+    datos.costoUSD = nuevoCostoUSD;
+    datos.costoMXN = costoTotal;
+    datos.impuestoMonto = impuestoUnitMonto * cantidad;
     datos.precioMXN = nuevoPrecio;
-    datos.ganancia = nuevaGanancia;
+    datos.precioUnitarioMXN = nuevoPrecio / cantidad;
+    datos.ganancia = nuevoPrecio - costoTotal;
   }
 
   try{
