@@ -574,7 +574,7 @@
 <div class="modal-overlay" id="modalVenta">
   <div class="modal-sheet">
     <h3 id="ventaEditTitulo">Detalle de la venta</h3>
-    <img id="ventaEditFoto" src="" style="display:none; width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px;">
+    <img id="ventaEditFoto" src="" onclick="ampliarFoto(this.src)" style="display:none; width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px; cursor:zoom-in;">
 
     <!-- ---- VISTA DE SOLO LECTURA ---- -->
     <div id="ventaVistaSoloLectura">
@@ -676,6 +676,12 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ============ VISOR DE FOTO AMPLIADA ============ -->
+<div id="visorFoto" onclick="cerrarFotoAmpliada()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:300; align-items:center; justify-content:center; padding:20px;">
+  <img id="visorFotoImg" src="" style="max-width:100%; max-height:100%; object-fit:contain; border-radius:8px;">
+  <button onclick="cerrarFotoAmpliada()" style="position:absolute; top:16px; right:16px; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:22px; width:40px; height:40px; border-radius:50%; cursor:pointer;">✕</button>
+</div>
 
 <script>
 /* ======================================================
@@ -1959,6 +1965,16 @@ function exportarExcel(){
 
 /* ============ TOAST ============ */
 let toastTimer;
+/* ============ VISOR DE FOTO AMPLIADA ============ */
+function ampliarFoto(src){
+  if (!src) return;
+  document.getElementById('visorFotoImg').src = src;
+  document.getElementById('visorFoto').style.display = 'flex';
+}
+function cerrarFotoAmpliada(){
+  document.getElementById('visorFoto').style.display = 'none';
+}
+
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
