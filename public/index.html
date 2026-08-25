@@ -408,6 +408,20 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
     <input type="text" id="buscarCliente" placeholder="Buscar cliente..." oninput="renderClientes()">
   </div>
+  <div class="two-col" style="margin-bottom:10px;">
+    <div class="field" style="margin-bottom:0;">
+      <label>Grupo de ventas</label>
+      <select id="clientesFiltroGrupoSelect" onchange="seleccionarClientesFiltroGrupo(this.value)">
+        <option value="">Todos los grupos</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <label>Ubicación</label>
+      <select id="clientesFiltroUbicacionSelect" onchange="seleccionarClientesFiltroUbicacion(this.value)">
+        <option value="">Todas</option>
+      </select>
+    </div>
+  </div>
   <div id="listaClientes"></div>
 </div>
 
@@ -936,6 +950,7 @@ function abrirModalUsuarios(){
   document.getElementById('uRolNuevo').value = 'visualizador';
   renderListaUsuariosAdmin();
   document.getElementById('modalUsuarios').classList.add('show');
+  pushNavState('modalUsuarios');
 }
 function closeModalUsuarios(){ document.getElementById('modalUsuarios').classList.remove('show'); }
 
@@ -1039,11 +1054,27 @@ async function toggleActivoUsuario(uid, activoActual){
 }
 
 /* ============ NAVEGACIÓN ============ */
+const COLORES_PANTALLA = {
+  screenNueva: '#1E2A26',
+  screenClientes: '#1E3A4C',
+  screenHistorial: '#4A331E',
+  screenReportes: '#33224C',
+  screenDetalleCliente: '#1E3A4C',
+};
+let navegandoPorPopstate = false;
+function pushNavState(label){
+  if (navegandoPorPopstate) return;
+  try{ history.pushState({navLabel: label}, '', '#' + label); }catch(e){}
+}
+
 function goTo(screenId){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(screenId).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === screenId));
   document.getElementById('saveBar').style.display = screenId === 'screenNueva' ? 'block' : 'none';
+
+  const topbar = document.querySelector('.topbar');
+  if (topbar && COLORES_PANTALLA[screenId]) topbar.style.background = COLORES_PANTALLA[screenId];
 
   const titles = {
     screenNueva: ['Mi Catálogo', 'Registrar producto y venta'],
@@ -1062,13 +1093,50 @@ function goTo(screenId){
   if (screenId === 'screenNueva'){
     setTimeout(()=> document.getElementById('fNombre').focus(), 50);
   }
+  pushNavState(screenId);
 }
+
+/* ============ BOTÓN "ATRÁS" DEL CELULAR: navega dentro de la app ============ */
+window.addEventListener('popstate', ()=>{
+  navegandoPorPopstate = true;
+
+  // 1) Si hay una foto ampliada abierta, ciérrala primero
+  if (document.getElementById('visorFoto').style.display === 'flex'){
+    cerrarFotoAmpliada();
+    navegandoPorPopstate = false;
+    return;
+  }
+  // 2) Si hay algún modal abierto, ciérralo primero
+  const modalAbierto = document.querySelector('.modal-overlay.show');
+  if (modalAbierto){
+    modalAbierto.classList.remove('show');
+    navegandoPorPopstate = false;
+    return;
+  }
+  // 3) Si estamos en el detalle de un cliente, regresa a la lista de clientes
+  if (document.getElementById('screenDetalleCliente').classList.contains('active')){
+    goTo('screenClientes');
+    navegandoPorPopstate = false;
+    return;
+  }
+  // 4) Si estamos en cualquier pantalla que no sea la principal, regresa a la principal
+  const pantallaHome = rolActual === 'admin' ? 'screenNueva' : 'screenHistorial';
+  const activa = document.querySelector('.screen.active');
+  if (activa && activa.id !== pantallaHome){
+    goTo(pantallaHome);
+  }
+  // 5) Si ya estamos en la pantalla principal, se deja que el navegador/Android
+  //    haga su comportamiento normal (minimizar o cerrar la app).
+  navegandoPorPopstate = false;
+});
+history.replaceState({navLabel:'screenNueva'}, '', '#screenNueva');
 
 /* ============ FOTO: elegir cámara o galería ============ */
 const MAX_FOTOS_VENTA = 5;
 function openFotoModal(){
   if (fotosBase64.length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
   document.getElementById('modalFoto').classList.add('show');
+  pushNavState('modalFoto');
 }
 function closeFotoModal(){ document.getElementById('modalFoto').classList.remove('show'); }
 
@@ -1222,6 +1290,7 @@ function openNewGroupModal(){
   if (soloAdmin()) return;
   document.getElementById('gNombre').value = '';
   document.getElementById('modalGrupo').classList.add('show');
+  pushNavState('modalGrupo');
   setTimeout(()=> document.getElementById('gNombre').focus(), 100);
 }
 function closeNewGroupModal(){ document.getElementById('modalGrupo').classList.remove('show'); }
@@ -1257,6 +1326,7 @@ function openNewLugarModal(){
   document.getElementById('lgNombre').value = '';
   renderListaLugaresAdmin();
   document.getElementById('modalLugar').classList.add('show');
+  pushNavState('modalLugar');
   setTimeout(()=> document.getElementById('lgNombre').focus(), 100);
 }
 function closeNewLugarModal(){ document.getElementById('modalLugar').classList.remove('show'); }
@@ -1357,6 +1427,7 @@ function openNewClientModal(){
   renderColorChips();
   renderLugarSelect();
   document.getElementById('modalCliente').classList.add('show');
+  pushNavState('modalCliente');
   setTimeout(()=> document.getElementById('mNombre').focus(), 100);
 }
 function openEditClientModal(id){
@@ -1376,6 +1447,7 @@ function openEditClientModal(id){
   renderLugarSelect();
   document.getElementById('mUbicacion').value = c.ubicacion || '';
   document.getElementById('modalCliente').classList.add('show');
+  pushNavState('modalCliente');
   setTimeout(()=> document.getElementById('mNombre').focus(), 100);
 }
 function closeNewClientModal(){ document.getElementById('modalCliente').classList.remove('show'); }
@@ -1493,7 +1565,31 @@ function limpiarFormulario(){
 }
 
 /* ============ VISTA: CLIENTES (segmentado) ============ */
+let clientesFiltroGrupo = '';
+let clientesFiltroUbicacion = '';
+function seleccionarClientesFiltroGrupo(id){ clientesFiltroGrupo = id; renderClientes(); }
+function seleccionarClientesFiltroUbicacion(u){ clientesFiltroUbicacion = u; renderClientes(); }
+
+function renderFiltrosClientes(){
+  const selGrupo = document.getElementById('clientesFiltroGrupoSelect');
+  if (selGrupo){
+    // Grupo más reciente primero (por fecha de creación del grupo)
+    const gruposRecientes = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+    selGrupo.innerHTML = '<option value="">Todos los grupos</option>' +
+      gruposRecientes.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+    selGrupo.value = clientesFiltroGrupo;
+  }
+  const selUbicacion = document.getElementById('clientesFiltroUbicacionSelect');
+  if (selUbicacion){
+    const ubicacionesRecientes = [...state.lugares].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+    selUbicacion.innerHTML = '<option value="">Todas</option>' +
+      ubicacionesRecientes.map(l => `<option value="${l.nombre}">${l.nombre}</option>`).join('');
+    selUbicacion.value = clientesFiltroUbicacion;
+  }
+}
+
 function renderClientes(){
+  renderFiltrosClientes();
   const q = (document.getElementById('buscarCliente').value || '').toLowerCase();
 
   const totalVentas = state.ventas.reduce((s,v)=>s+v.precioMXN,0);
@@ -1505,10 +1601,18 @@ function renderClientes(){
   const cont = document.getElementById('listaClientes');
   let clientes = state.clientes.filter(c => c.nombre.toLowerCase().includes(q));
 
+  if (clientesFiltroUbicacion){
+    clientes = clientes.filter(c => c.ubicacion === clientesFiltroUbicacion);
+  }
+  if (clientesFiltroGrupo){
+    const idsConGrupo = new Set(state.ventas.filter(v => v.grupoId === clientesFiltroGrupo).map(v => v.clienteId));
+    clientes = clientes.filter(c => idsConGrupo.has(c.id));
+  }
+
   if (clientes.length === 0){
     cont.innerHTML = `<div class="empty">
       <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      <p>${state.clientes.length===0 ? 'Aún no tienes clientes registrados.<br>Agrega uno desde "Nueva venta".' : 'Sin resultados para esa búsqueda.'}</p>
+      <p>${state.clientes.length===0 ? 'Aún no tienes clientes registrados.<br>Agrega uno desde "Nueva venta".' : 'Sin resultados para este filtro.'}</p>
     </div>`;
     return;
   }
@@ -1678,6 +1782,7 @@ function abrirEditarVenta(id){
   document.getElementById('ventaVistaEdicion').style.display = 'none';
 
   document.getElementById('modalVenta').classList.add('show');
+  pushNavState('modalVenta');
 }
 
 function renderVentaFotosGridEdicion(){
@@ -1885,6 +1990,7 @@ function openAbonoModal(clienteId){
   document.getElementById('aMonto').value = '';
   document.getElementById('aNota').value = '';
   document.getElementById('modalAbono').classList.add('show');
+  pushNavState('modalAbono');
   setTimeout(()=> document.getElementById('aMonto').focus(), 100);
 }
 function closeAbonoModal(){ document.getElementById('modalAbono').classList.remove('show'); }
@@ -2125,6 +2231,7 @@ function ampliarFoto(src){
   if (!src) return;
   document.getElementById('visorFotoImg').src = src;
   document.getElementById('visorFoto').style.display = 'flex';
+  pushNavState('visorFoto');
 }
 function cerrarFotoAmpliada(){
   document.getElementById('visorFoto').style.display = 'none';
