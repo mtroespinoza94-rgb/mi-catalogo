@@ -667,9 +667,13 @@
           <input type="number" id="vCostoUSD" step="0.01" inputmode="decimal">
         </div>
         <div class="field money">
-          <label>Precio de venta total (MXN)</label>
-          <input type="number" id="vPrecio" step="0.01" inputmode="decimal">
+          <label>Tipo de cambio (USD→MXN)</label>
+          <input type="number" id="vTipoCambio" step="0.01" inputmode="decimal">
         </div>
+      </div>
+      <div class="field money">
+        <label>Precio de venta total (MXN)</label>
+        <input type="number" id="vPrecio" step="0.01" inputmode="decimal">
       </div>
       <div class="field">
         <label>Comentarios de esta compra</label>
@@ -1828,6 +1832,7 @@ function activarEdicionVenta(){
   selGrupo.value = v.grupoId || '';
 
   document.getElementById('vCostoUSD').value = v.costoUSD || 0;
+  document.getElementById('vTipoCambio').value = v.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('vPrecio').value = v.precioMXN;
   document.getElementById('vComentarios').value = v.comentarios || '';
 
@@ -1872,7 +1877,7 @@ function cancelarEdicionVenta(){
 function actualizarGananciaPreview(ventaOriginal){
   const costoUSD = parseFloat(document.getElementById('vCostoUSD').value) || 0;
   const precio = parseFloat(document.getElementById('vPrecio').value) || 0;
-  const tipoCambio = ventaOriginal.tipoCambio || DEFAULT_TIPO_CAMBIO;
+  const tipoCambio = parseFloat(document.getElementById('vTipoCambio').value) || ventaOriginal.tipoCambio || DEFAULT_TIPO_CAMBIO;
   const impuestoPct = ventaOriginal.impuestoPct || 0;
   const cantidad = ventaOriginal.cantidad || 1;
   const costoUnitMXN = costoUSD * tipoCambio;
@@ -1883,6 +1888,10 @@ function actualizarGananciaPreview(ventaOriginal){
   el.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
 }
 document.getElementById('vCostoUSD').addEventListener('input', ()=>{
+  const v = state.ventas.find(x=>x.id===ventaEditandoId);
+  if (v) actualizarGananciaPreview(v);
+});
+document.getElementById('vTipoCambio').addEventListener('input', ()=>{
   const v = state.ventas.find(x=>x.id===ventaEditandoId);
   if (v) actualizarGananciaPreview(v);
 });
@@ -1901,19 +1910,21 @@ async function guardarEdicionVenta(){
   const nuevoClienteId = document.getElementById('vCliente').value;
   const nuevoGrupoId = document.getElementById('vGrupo').value;
   const nuevoCostoUSD = parseFloat(document.getElementById('vCostoUSD').value) || 0;
+  const nuevoTipoCambio = parseFloat(document.getElementById('vTipoCambio').value) || DEFAULT_TIPO_CAMBIO;
   const nuevoPrecio = parseFloat(document.getElementById('vPrecio').value) || 0;
   const nuevosComentarios = document.getElementById('vComentarios').value.trim();
 
   const cambiaCliente = nuevoClienteId !== v.clienteId;
   const cambiaGrupo = nuevoGrupoId !== (v.grupoId || '');
   const cambiaCosto = Math.abs(nuevoCostoUSD - (v.costoUSD || 0)) > 0.005;
+  const cambiaTipoCambio = Math.abs(nuevoTipoCambio - (v.tipoCambio || DEFAULT_TIPO_CAMBIO)) > 0.005;
   const cambiaPrecio = Math.abs(nuevoPrecio - v.precioMXN) > 0.005;
   const cambiaComentarios = nuevosComentarios !== (v.comentarios || '');
   const fotosOriginales = (v.fotos && v.fotos.length > 0) ? v.fotos : (v.foto ? [v.foto] : []);
   const cambiaFotos = fotosEdicionVenta !== null &&
     JSON.stringify(fotosEdicionVenta) !== JSON.stringify(fotosOriginales);
 
-  if (!cambiaCliente && !cambiaGrupo && !cambiaCosto && !cambiaPrecio && !cambiaComentarios && !cambiaFotos){ closeVentaModal(); return; }
+  if (!cambiaCliente && !cambiaGrupo && !cambiaCosto && !cambiaTipoCambio && !cambiaPrecio && !cambiaComentarios && !cambiaFotos){ closeVentaModal(); return; }
 
   const clienteNuevo = state.clientes.find(c=>c.id===nuevoClienteId);
   const clienteViejo = state.clientes.find(c=>c.id===v.clienteId);
@@ -1923,6 +1934,7 @@ async function guardarEdicionVenta(){
   if (cambiaCliente) mensaje += `\n• Cliente: ${clienteViejo ? clienteViejo.nombre : '—'} → ${clienteNuevo ? clienteNuevo.nombre : '—'}`;
   if (cambiaGrupo) mensaje += `\n• Grupo: ${grupoViejo ? grupoViejo.nombre : 'Sin grupo'} → ${grupoNuevo ? grupoNuevo.nombre : 'Sin grupo'}`;
   if (cambiaCosto) mensaje += `\n• Costo por unidad: $${(v.costoUSD||0).toFixed(2)} USD → $${nuevoCostoUSD.toFixed(2)} USD`;
+  if (cambiaTipoCambio) mensaje += `\n• Tipo de cambio: $${(v.tipoCambio||DEFAULT_TIPO_CAMBIO).toFixed(2)} → $${nuevoTipoCambio.toFixed(2)}`;
   if (cambiaPrecio) mensaje += `\n• Precio: ${fmtMXN(v.precioMXN)} → ${fmtMXN(nuevoPrecio)}`;
   if (cambiaComentarios) mensaje += `\n• Comentarios actualizados`;
   if (cambiaFotos) mensaje += `\n• Fotos actualizadas`;
@@ -1936,14 +1948,15 @@ async function guardarEdicionVenta(){
     datos.fotos = fotosEdicionVenta;
     datos.foto = fotosEdicionVenta[0] || null;
   }
-  if (cambiaCosto || cambiaPrecio){
+  if (cambiaCosto || cambiaTipoCambio || cambiaPrecio){
     const cantidad = v.cantidad || 1;
-    const tipoCambio = v.tipoCambio || DEFAULT_TIPO_CAMBIO;
+    const tipoCambio = nuevoTipoCambio;
     const impuestoPct = v.impuestoPct || 0;
     const costoUnitMXN = nuevoCostoUSD * tipoCambio;
     const impuestoUnitMonto = costoUnitMXN * (impuestoPct/100);
     const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
     datos.costoUSD = nuevoCostoUSD;
+    datos.tipoCambio = tipoCambio;
     datos.costoMXN = costoTotal;
     datos.impuestoMonto = impuestoUnitMonto * cantidad;
     datos.precioMXN = nuevoPrecio;
