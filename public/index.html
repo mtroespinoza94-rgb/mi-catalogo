@@ -83,6 +83,21 @@
   .photo-upload .hint{ position:relative; z-index:1; text-align:center; padding:12px; }
   .photo-upload input[type=file]{ display:none; }
 
+  /* ---- Miniaturas de fotos (varias por venta) ---- */
+  .foto-thumb{
+    width:84px; height:84px; border-radius:10px; overflow:hidden; position:relative; flex-shrink:0;
+  }
+  .foto-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .foto-thumb .foto-quitar{
+    position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%;
+    background:rgba(0,0,0,0.65); color:#fff; border:none; font-size:13px; line-height:1; cursor:pointer;
+  }
+  .foto-agregar{
+    width:84px; height:84px; border-radius:10px; border:1.5px dashed #C7CCC5; background:#FAFBFA;
+    display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:26px;
+    cursor:pointer; flex-shrink:0;
+  }
+
   .btn{
     width:100%; padding:14px; border-radius:12px; border:none; background:var(--ink); color:white;
     font-size:15px; font-weight:600; cursor:pointer; font-family:'Space Grotesk',sans-serif;
@@ -278,13 +293,11 @@
 
 <!-- ============ NUEVA VENTA ============ -->
 <div class="screen active" id="screenNueva">
-  <div class="photo-upload" id="photoUpload" onclick="openFotoModal()">
-    <img id="photoPreview" style="display:none;">
-    <div class="hint" id="photoHint">
-      📷<br><strong>Toca para agregar foto</strong><br>cámara o galería
-    </div>
+  <div class="field">
+    <label>Fotos del producto (puedes agregar varias)</label>
+    <div id="fotosGrid" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
     <input type="file" id="fotoInputCamara" accept="image/*" capture="environment" style="display:none;">
-    <input type="file" id="fotoInputGaleria" accept="image/*" style="display:none;">
+    <input type="file" id="fotoInputGaleria" accept="image/*" multiple style="display:none;">
   </div>
 
   <div class="card">
@@ -368,7 +381,7 @@
       <label>Grupo de ventas</label>
       <div class="client-select">
         <select id="fGrupo">
-          <option value="">— Sin grupo —</option>
+          <option value="">— Selecciona un grupo —</option>
         </select>
         <button class="btn small secondary" id="btnNuevoGrupo" onclick="openNewGroupModal()">+ Nuevo</button>
       </div>
@@ -594,7 +607,8 @@
 <div class="modal-overlay" id="modalVenta">
   <div class="modal-sheet">
     <h3 id="ventaEditTitulo">Detalle de la venta</h3>
-    <img id="ventaEditFoto" src="" onclick="ampliarFoto(this.src)" style="display:none; width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px; cursor:zoom-in;">
+    <img id="ventaEditFoto" src="" onclick="ampliarFoto(this.src)" style="display:none; width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:8px; cursor:zoom-in;">
+    <div id="ventaVistaFotosExtra" style="display:flex; gap:8px; overflow-x:auto; margin-bottom:12px;"></div>
 
     <!-- ---- VISTA DE SOLO LECTURA ---- -->
     <div id="ventaVistaSoloLectura">
@@ -617,17 +631,21 @@
     <!-- ---- VISTA DE EDICIÓN (solo admin, al tocar "Modificar") ---- -->
     <div id="ventaVistaEdicion" style="display:none;">
       <div class="field">
-        <label>Foto del producto</label>
-        <div style="display:flex; gap:8px;">
-          <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('ventaFotoInputCamara').click();">📷 Tomar foto</button>
-          <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('ventaFotoInputGaleria').click();">🖼️ Galería</button>
-        </div>
+        <label>Fotos del producto (puedes agregar varias)</label>
+        <div id="ventaFotosGrid" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
+        <button type="button" class="btn small secondary" onclick="document.getElementById('ventaFotoInputCamara').click();">📷 Tomar otra foto</button>
         <input type="file" id="ventaFotoInputCamara" accept="image/*" capture="environment" style="display:none;">
-        <input type="file" id="ventaFotoInputGaleria" accept="image/*" style="display:none;">
+        <input type="file" id="ventaFotoInputGaleria" accept="image/*" multiple style="display:none;">
       </div>
       <div class="field">
         <label>¿A quién se le vendió?</label>
         <select id="vCliente"></select>
+      </div>
+      <div class="field">
+        <label>Grupo de ventas</label>
+        <select id="vGrupo">
+          <option value="">— Sin grupo —</option>
+        </select>
       </div>
       <div class="two-col">
         <div class="field money">
@@ -777,7 +795,7 @@ function savePrefs(){ localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 
 let prefs = loadPrefs();
 let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [], usuarios: [] };
-let fotoBase64 = null;
+let fotosBase64 = [];
 let categoriaSeleccionada = CATEGORIAS[0];
 let plataformaSeleccionada = 'instagram';
 let colorSeleccionado = COLORES_CLIENTE[0].id;
@@ -1047,11 +1065,34 @@ function goTo(screenId){
 }
 
 /* ============ FOTO: elegir cámara o galería ============ */
-function openFotoModal(){ document.getElementById('modalFoto').classList.add('show'); }
+const MAX_FOTOS_VENTA = 5;
+function openFotoModal(){
+  if (fotosBase64.length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
+  document.getElementById('modalFoto').classList.add('show');
+}
 function closeFotoModal(){ document.getElementById('modalFoto').classList.remove('show'); }
+
+function renderFotosGrid(){
+  const grid = document.getElementById('fotosGrid');
+  const miniaturas = fotosBase64.map((f, i) => `
+    <div class="foto-thumb">
+      <img src="${f}">
+      <button type="button" class="foto-quitar" onclick="quitarFotoNueva(${i})">✕</button>
+    </div>
+  `).join('');
+  const botonAgregar = fotosBase64.length < MAX_FOTOS_VENTA
+    ? `<div class="foto-agregar" onclick="openFotoModal()">＋</div>`
+    : '';
+  grid.innerHTML = miniaturas + botonAgregar;
+}
+function quitarFotoNueva(index){
+  fotosBase64.splice(index, 1);
+  renderFotosGrid();
+}
 
 function procesarFoto(file){
   if (!file) return;
+  if (fotosBase64.length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
   const reader = new FileReader();
   reader.onload = (ev)=>{
     const img = new Image();
@@ -1063,17 +1104,19 @@ function procesarFoto(file){
       canvas.height = img.height * scale;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      fotoBase64 = canvas.toDataURL('image/jpeg', 0.65);
-      document.getElementById('photoPreview').src = fotoBase64;
-      document.getElementById('photoPreview').style.display = 'block';
-      document.getElementById('photoHint').style.display = 'none';
+      fotosBase64.push(canvas.toDataURL('image/jpeg', 0.65));
+      renderFotosGrid();
     };
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
 }
 document.getElementById('fotoInputCamara').addEventListener('change', (e)=> procesarFoto(e.target.files[0]));
-document.getElementById('fotoInputGaleria').addEventListener('change', (e)=> procesarFoto(e.target.files[0]));
+document.getElementById('fotoInputGaleria').addEventListener('change', (e)=>{
+  Array.from(e.target.files).forEach(f => procesarFoto(f));
+  e.target.value = '';
+});
+renderFotosGrid();
 
 /* ============ CÁLCULO DE MARGEN EN VIVO (con impuesto) ============ */
 function cambiarCantidad(delta){
@@ -1166,8 +1209,9 @@ function getColorCliente(id){ return COLORES_CLIENTE.find(c=>c.id===id) || COLOR
 function renderGrupoSelect(){
   const sel = document.getElementById('fGrupo');
   const actual = sel.value || prefs.grupoId || '';
-  sel.innerHTML = '<option value="">— Sin grupo —</option>' +
-    state.grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  sel.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
+    gruposOrdenados.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
   sel.value = actual;
 }
 function soloAdmin(){
@@ -1389,6 +1433,7 @@ async function guardarVenta(){
 
   if (!nombre){ showToast('⚠️ Falta el nombre del producto'); return; }
   if (!clienteId){ showToast('⚠️ Selecciona a quién se lo vendes'); return; }
+  if (!grupoId){ showToast('⚠️ Selecciona un grupo de ventas'); return; }
   if (!precioMXN){ showToast('⚠️ Falta el precio de venta'); return; }
 
   const costoUnitMXN = costoUSD * tipoCambio;
@@ -1405,7 +1450,7 @@ async function guardarVenta(){
   try{
     setSync('busy');
     await db.collection('ventas').add({
-      nombre, categoria, foto: fotoBase64 || null,
+      nombre, categoria, foto: fotosBase64[0] || null, fotos: fotosBase64,
       cantidad, comentarios,
       costoUSD, tipoCambio, impuestoPct, impuestoMonto,
       precioUnitarioMXN: precioMXN,
@@ -1438,9 +1483,8 @@ function limpiarFormulario(){
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
   renderGrupoSelect();
   renderClienteRecientesChips();
-  fotoBase64 = null;
-  document.getElementById('photoPreview').style.display = 'none';
-  document.getElementById('photoHint').style.display = 'block';
+  fotosBase64 = [];
+  renderFotosGrid();
   categoriaSeleccionada = CATEGORIAS[0];
   renderCategoriaChips();
   document.getElementById('fCategoriaOtra').style.display = 'none';
@@ -1598,12 +1642,12 @@ function verDetalleCliente(id, mantenerPantalla){
 
 /* ============ EDITAR / ELIMINAR VENTA ============ */
 let ventaEditandoId = null;
-let fotoEdicionVentaNueva = null;
+let fotosEdicionVenta = null; // null = sin cambios; array = nuevo conjunto de fotos
 function abrirEditarVenta(id){
   const v = state.ventas.find(x=>x.id===id);
   if (!v) return;
   ventaEditandoId = id;
-  fotoEdicionVentaNueva = null;
+  fotosEdicionVenta = null;
 
   const esAdmin = rolActual === 'admin';
   const c = state.clientes.find(x=>x.id===v.clienteId);
@@ -1612,16 +1656,23 @@ function abrirEditarVenta(id){
   // ---- Vista de solo lectura (siempre se muestra primero) ----
   document.getElementById('ventaEditTitulo').textContent = v.nombre;
   document.getElementById('ventaEditMeta').textContent =
-    `${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'})}${g ? ' · '+g.nombre : ''}`;
+    `${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'})}${g ? ' · '+g.nombre : ' · Sin grupo'}`;
   document.getElementById('ventaVistaCantidad').textContent = v.cantidad || 1;
   document.getElementById('ventaVistaPrecio').textContent = fmtMXN(v.precioMXN);
   document.getElementById('ventaVistaCliente').textContent = c ? (c.alias ? `${c.nombre} (${c.alias})` : c.nombre) : '—';
   document.getElementById('ventaVistaComentarios').textContent = v.comentarios || 'Sin comentarios';
   document.getElementById('ventaVistaBotonModificar').style.display = esAdmin ? 'block' : 'none';
 
+  const fotos = (v.fotos && v.fotos.length > 0) ? v.fotos : (v.foto ? [v.foto] : []);
   const fotoEl = document.getElementById('ventaEditFoto');
-  if (v.foto){ fotoEl.src = v.foto; fotoEl.style.display = 'block'; }
-  else { fotoEl.style.display = 'none'; }
+  const extraWrap = document.getElementById('ventaVistaFotosExtra');
+  if (fotos.length > 0){
+    fotoEl.src = fotos[0]; fotoEl.style.display = 'block';
+    extraWrap.innerHTML = fotos.slice(1).map(f => `<img src="${f}" onclick="ampliarFoto('${f}')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; cursor:zoom-in; flex-shrink:0;">`).join('');
+  } else {
+    fotoEl.style.display = 'none';
+    extraWrap.innerHTML = '';
+  }
 
   document.getElementById('ventaVistaSoloLectura').style.display = 'block';
   document.getElementById('ventaVistaEdicion').style.display = 'none';
@@ -1629,17 +1680,47 @@ function abrirEditarVenta(id){
   document.getElementById('modalVenta').classList.add('show');
 }
 
+function renderVentaFotosGridEdicion(){
+  const grid = document.getElementById('ventaFotosGrid');
+  const fotos = fotosEdicionVenta || [];
+  const miniaturas = fotos.map((f, i) => `
+    <div class="foto-thumb">
+      <img src="${f}">
+      <button type="button" class="foto-quitar" onclick="quitarFotoEdicionVenta(${i})">✕</button>
+    </div>
+  `).join('');
+  const botonAgregar = fotos.length < MAX_FOTOS_VENTA
+    ? `<div class="foto-agregar" onclick="abrirSelectorFotoEdicion()">＋</div>`
+    : '';
+  grid.innerHTML = miniaturas + botonAgregar;
+}
+function abrirSelectorFotoEdicion(){
+  if ((fotosEdicionVenta||[]).length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
+  document.getElementById('ventaFotoInputGaleria').click();
+}
+function quitarFotoEdicionVenta(index){
+  fotosEdicionVenta.splice(index, 1);
+  renderVentaFotosGridEdicion();
+}
+
 function activarEdicionVenta(){
   if (soloAdmin()) return;
   const v = state.ventas.find(x=>x.id===ventaEditandoId);
   if (!v) return;
-  fotoEdicionVentaNueva = null;
+  fotosEdicionVenta = (v.fotos && v.fotos.length > 0) ? [...v.fotos] : (v.foto ? [v.foto] : []);
+  renderVentaFotosGridEdicion();
 
   document.getElementById('ventaEditTitulo').textContent = 'Editar venta';
   const sel = document.getElementById('vCliente');
   const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   sel.innerHTML = clientesOrdenados.map(cl => `<option value="${cl.id}">${cl.alias ? cl.nombre+' ('+cl.alias+')' : cl.nombre}</option>`).join('');
   sel.value = v.clienteId;
+
+  const selGrupo = document.getElementById('vGrupo');
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  selGrupo.innerHTML = '<option value="">— Sin grupo —</option>' +
+    gruposOrdenados.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+  selGrupo.value = v.grupoId || '';
 
   document.getElementById('vCostoUSD').value = v.costoUSD || 0;
   document.getElementById('vPrecio').value = v.precioMXN;
@@ -1652,6 +1733,7 @@ function activarEdicionVenta(){
 
 function procesarFotoEdicionVenta(file){
   if (!file) return;
+  if ((fotosEdicionVenta||[]).length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
   const reader = new FileReader();
   reader.onload = (ev)=>{
     const img = new Image();
@@ -1663,21 +1745,21 @@ function procesarFotoEdicionVenta(file){
       canvas.height = img.height * scale;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      fotoEdicionVentaNueva = canvas.toDataURL('image/jpeg', 0.65);
-      const fotoEl = document.getElementById('ventaEditFoto');
-      fotoEl.src = fotoEdicionVentaNueva;
-      fotoEl.style.display = 'block';
-      showToast('📷 Foto lista — no olvides "Guardar cambios"');
+      fotosEdicionVenta.push(canvas.toDataURL('image/jpeg', 0.65));
+      renderVentaFotosGridEdicion();
     };
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
 }
-document.getElementById('ventaFotoInputCamara').addEventListener('change', (e)=> procesarFotoEdicionVenta(e.target.files[0]));
-document.getElementById('ventaFotoInputGaleria').addEventListener('change', (e)=> procesarFotoEdicionVenta(e.target.files[0]));
+document.getElementById('ventaFotoInputCamara').addEventListener('change', (e)=>{ procesarFotoEdicionVenta(e.target.files[0]); e.target.value=''; });
+document.getElementById('ventaFotoInputGaleria').addEventListener('change', (e)=>{
+  Array.from(e.target.files).forEach(f => procesarFotoEdicionVenta(f));
+  e.target.value = '';
+});
 
 function cancelarEdicionVenta(){
-  fotoEdicionVentaNueva = null;
+  fotosEdicionVenta = null;
   // Regresa a la vista de solo lectura sin guardar cambios
   abrirEditarVenta(ventaEditandoId);
 }
@@ -1712,32 +1794,43 @@ async function guardarEdicionVenta(){
   const v = state.ventas.find(x=>x.id===ventaEditandoId);
   if (!v) return;
   const nuevoClienteId = document.getElementById('vCliente').value;
+  const nuevoGrupoId = document.getElementById('vGrupo').value;
   const nuevoCostoUSD = parseFloat(document.getElementById('vCostoUSD').value) || 0;
   const nuevoPrecio = parseFloat(document.getElementById('vPrecio').value) || 0;
   const nuevosComentarios = document.getElementById('vComentarios').value.trim();
 
   const cambiaCliente = nuevoClienteId !== v.clienteId;
+  const cambiaGrupo = nuevoGrupoId !== (v.grupoId || '');
   const cambiaCosto = Math.abs(nuevoCostoUSD - (v.costoUSD || 0)) > 0.005;
   const cambiaPrecio = Math.abs(nuevoPrecio - v.precioMXN) > 0.005;
   const cambiaComentarios = nuevosComentarios !== (v.comentarios || '');
-  const cambiaFoto = fotoEdicionVentaNueva !== null;
+  const fotosOriginales = (v.fotos && v.fotos.length > 0) ? v.fotos : (v.foto ? [v.foto] : []);
+  const cambiaFotos = fotosEdicionVenta !== null &&
+    JSON.stringify(fotosEdicionVenta) !== JSON.stringify(fotosOriginales);
 
-  if (!cambiaCliente && !cambiaCosto && !cambiaPrecio && !cambiaComentarios && !cambiaFoto){ closeVentaModal(); return; }
+  if (!cambiaCliente && !cambiaGrupo && !cambiaCosto && !cambiaPrecio && !cambiaComentarios && !cambiaFotos){ closeVentaModal(); return; }
 
   const clienteNuevo = state.clientes.find(c=>c.id===nuevoClienteId);
   const clienteViejo = state.clientes.find(c=>c.id===v.clienteId);
+  const grupoNuevo = nuevoGrupoId ? getGrupo(nuevoGrupoId) : null;
+  const grupoViejo = v.grupoId ? getGrupo(v.grupoId) : null;
   let mensaje = '¿Confirmas guardar estos cambios?\n';
   if (cambiaCliente) mensaje += `\n• Cliente: ${clienteViejo ? clienteViejo.nombre : '—'} → ${clienteNuevo ? clienteNuevo.nombre : '—'}`;
+  if (cambiaGrupo) mensaje += `\n• Grupo: ${grupoViejo ? grupoViejo.nombre : 'Sin grupo'} → ${grupoNuevo ? grupoNuevo.nombre : 'Sin grupo'}`;
   if (cambiaCosto) mensaje += `\n• Costo por unidad: $${(v.costoUSD||0).toFixed(2)} USD → $${nuevoCostoUSD.toFixed(2)} USD`;
   if (cambiaPrecio) mensaje += `\n• Precio: ${fmtMXN(v.precioMXN)} → ${fmtMXN(nuevoPrecio)}`;
   if (cambiaComentarios) mensaje += `\n• Comentarios actualizados`;
-  if (cambiaFoto) mensaje += `\n• Foto actualizada`;
+  if (cambiaFotos) mensaje += `\n• Fotos actualizadas`;
   if (!confirm(mensaje)) return;
 
   const datos = {};
   if (cambiaCliente) datos.clienteId = nuevoClienteId;
+  if (cambiaGrupo) datos.grupoId = nuevoGrupoId || null;
   if (cambiaComentarios) datos.comentarios = nuevosComentarios;
-  if (cambiaFoto) datos.foto = fotoEdicionVentaNueva;
+  if (cambiaFotos){
+    datos.fotos = fotosEdicionVenta;
+    datos.foto = fotosEdicionVenta[0] || null;
+  }
   if (cambiaCosto || cambiaPrecio){
     const cantidad = v.cantidad || 1;
     const tipoCambio = v.tipoCambio || DEFAULT_TIPO_CAMBIO;
