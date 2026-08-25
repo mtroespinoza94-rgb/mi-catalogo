@@ -595,10 +595,6 @@
       </div>
     </div>
     <div class="field">
-      <label>¿De qué plataforma es?</label>
-      <div class="chip-row" id="plataformaChips"></div>
-    </div>
-    <div class="field">
       <label>Color del cliente</label>
       <div class="chip-row" id="colorChips"></div>
     </div>
@@ -1469,9 +1465,7 @@ function openNewClientModal(){
   document.getElementById('mTelefono').value = '';
   document.getElementById('mUbicacion').value = '';
   document.getElementById('mNotas').value = '';
-  plataformaSeleccionada = 'instagram';
   colorSeleccionado = COLORES_CLIENTE[0].id;
-  renderPlataformaChips();
   renderColorChips();
   renderLugarSelect();
   document.getElementById('modalCliente').classList.add('show');
@@ -1488,9 +1482,7 @@ function openEditClientModal(id){
   document.getElementById('mAlias').value = c.alias || '';
   document.getElementById('mTelefono').value = c.telefono || '';
   document.getElementById('mNotas').value = c.notas || '';
-  plataformaSeleccionada = c.plataforma || 'instagram';
   colorSeleccionado = c.color || COLORES_CLIENTE[0].id;
-  renderPlataformaChips();
   renderColorChips();
   renderLugarSelect();
   document.getElementById('mUbicacion').value = c.ubicacion || '';
@@ -1509,7 +1501,6 @@ async function guardarCliente(){
     alias: document.getElementById('mAlias').value.trim(),
     telefono: document.getElementById('mTelefono').value.trim(),
     ubicacion: document.getElementById('mUbicacion').value,
-    plataforma: plataformaSeleccionada,
     color: colorSeleccionado,
     notas: document.getElementById('mNotas').value.trim(),
   };
@@ -1673,7 +1664,6 @@ function renderClientes(){
   }).sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
 
   cont.innerHTML = clientes.map(c=>{
-    const plat = getPlataforma(c.plataforma);
     const col = getColorCliente(c.color);
     const iniciales = c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase();
     return `
@@ -1681,7 +1671,7 @@ function renderClientes(){
         <div class="client-avatar" style="background:${col.bg}; color:${col.hex};">${iniciales}</div>
         <div class="client-info">
           <div class="client-name">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400;">(${c.alias})</span>` : ''}</div>
-          <span class="platform-badge" style="background:${plat.bg}; color:${plat.color}; border:1px solid ${plat.border}">${plat.nombre}</span>
+          ${c.ubicacion ? `<span class="platform-badge" style="background:rgba(59,130,246,0.18); color:#93C5FD; border:1px solid rgba(59,130,246,0.35);">📍 ${c.ubicacion}</span>` : ''}
         </div>
         <div class="client-total">
           <div class="amt" style="${c.saldo > 0 ? 'color:var(--danger)' : ''}">${fmtMXN(c.saldo)}</div>
@@ -1707,7 +1697,6 @@ function verDetalleCliente(id, mantenerPantalla){
   const total = todasLasVentas.reduce((s,v)=>s+v.precioMXN,0);
   const totalAbonado = abonos.reduce((s,a)=>s+a.monto,0);
   const saldo = total - totalAbonado;
-  const plat = getPlataforma(c.plataforma);
   const col = getColorCliente(c.color);
 
   // Grupos en los que este cliente tiene compras, para el filtro
@@ -1728,7 +1717,6 @@ function verDetalleCliente(id, mantenerPantalla){
         <div class="client-avatar" style="width:52px;height:52px;font-size:17px; background:${col.bg}; color:${col.hex};">${c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase()}</div>
         <div style="flex:1;">
           <h3 style="margin:0; font-size:17px;">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${c.alias})</span>` : ''}</h3>
-          <span class="platform-badge" style="background:${plat.bg}; color:${plat.color}; border:1px solid ${plat.border}">${plat.nombre}</span>
         </div>
         ${rolActual === 'admin' ? `<button class="btn secondary small" onclick="openEditClientModal('${c.id}')">Editar</button>` : ''}
       </div>
@@ -2263,7 +2251,6 @@ function exportarExcel(){
       'Cliente': c ? c.nombre : '',
       'Alias': c ? c.alias : '',
       'Ubicación': c ? c.ubicacion : '',
-      'Plataforma': c ? getPlataforma(c.plataforma).nombre : '',
       'Grupo': g ? g.nombre : '',
       'Costo USD': v.costoUSD,
       'Tipo de cambio': v.tipoCambio,
@@ -2305,7 +2292,6 @@ function showToast(msg){
 /* ============ INIT: escuchar Firestore en tiempo real ============ */
 function iniciarApp(){
   aplicarPermisosUI();
-  renderPlataformaChips();
   renderColorChips();
   document.getElementById('fTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
   document.getElementById('fImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
