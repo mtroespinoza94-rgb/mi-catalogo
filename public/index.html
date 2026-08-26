@@ -754,6 +754,26 @@
   </div>
 </div>
 
+<!-- ============ MODAL EDITAR / ELIMINAR ABONO ============ -->
+<div class="modal-overlay" id="modalEditarAbono">
+  <div class="modal-sheet">
+    <h3>Editar abono</h3>
+    <div class="field money">
+      <label>Cantidad abonada (MXN)</label>
+      <input type="number" id="eaMonto" step="0.01" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Nota (opcional)</label>
+      <input type="text" id="eaNota" placeholder="Ej. Pago por transferencia">
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button class="btn secondary" onclick="closeEditarAbonoModal()">Cancelar</button>
+      <button class="btn" onclick="guardarEdicionAbono()">Guardar cambios</button>
+    </div>
+    <button class="btn" style="background:var(--danger);" onclick="eliminarAbono()">🗑️ Eliminar este abono</button>
+  </div>
+</div>
+
 <!-- ============ MODAL NUEVO GRUPO ============ -->
 <div class="modal-overlay" id="modalGrupo">
   <div class="modal-sheet">
@@ -1296,7 +1316,7 @@ function forzarMayusculas(id){
     if (start !== null && end !== null) el.setSelectionRange(start, end);
   });
 }
-['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','buscarCliente','vComentarios','fComentarios'].forEach(forzarMayusculas);
+['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','eaNota','buscarCliente','vComentarios','fComentarios'].forEach(forzarMayusculas);
 
 /* ============ PLATAFORMAS (chips en modal cliente) ============ */
 function renderPlataformaChips(){
@@ -1741,7 +1761,7 @@ function verDetalleCliente(id, mantenerPantalla){
     <div class="card" style="padding:6px 16px;">
       ${abonos.length === 0 ? '<p style="color:var(--ink-soft); font-size:13px; padding:12px 0;">Sin abonos registrados todavía.</p>' :
         abonos.map(a => `
-          <div class="order-item">
+          <div class="order-item" ${rolActual === 'admin' ? `onclick="abrirEditarAbono('${a.id}')" style="cursor:pointer;"` : ''}>
             <div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:16px; background:var(--profit-bg);">💵</div>
             <div>
               <div class="oi-name">${a.nota || 'Abono'}</div>
@@ -2059,6 +2079,68 @@ async function guardarAbono(){
   }catch(e){
     setSync('err');
     showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
+  }
+}
+
+/* ============ EDITAR / ELIMINAR ABONO ============ */
+let abonoEditandoId = null;
+function abrirEditarAbono(id){
+  if (soloAdmin()) return;
+  const a = state.abonos.find(x=>x.id===id);
+  if (!a) return;
+  abonoEditandoId = id;
+  document.getElementById('eaMonto').value = a.monto;
+  document.getElementById('eaNota').value = a.nota || '';
+  document.getElementById('modalEditarAbono').classList.add('show');
+  pushNavState('modalEditarAbono');
+}
+function closeEditarAbonoModal(){ document.getElementById('modalEditarAbono').classList.remove('show'); abonoEditandoId = null; }
+
+async function guardarEdicionAbono(){
+  if (soloAdmin()) return;
+  if (!abonoEditandoId) return;
+  const a = state.abonos.find(x=>x.id===abonoEditandoId);
+  if (!a) return;
+  const nuevoMonto = parseFloat(document.getElementById('eaMonto').value) || 0;
+  const nuevaNota = document.getElementById('eaNota').value.trim();
+  if (nuevoMonto <= 0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+
+  const cambiaMonto = Math.abs(nuevoMonto - a.monto) > 0.005;
+  const cambiaNota = nuevaNota !== (a.nota || '');
+  if (!cambiaMonto && !cambiaNota){ closeEditarAbonoModal(); return; }
+
+  let mensaje = '¿Confirmas guardar estos cambios en el abono?\n';
+  if (cambiaMonto) mensaje += `\n• Monto: ${fmtMXN(a.monto)} → ${fmtMXN(nuevoMonto)}`;
+  if (cambiaNota) mensaje += `\n• Nota actualizada`;
+  if (!confirm(mensaje)) return;
+
+  try{
+    setSync('busy');
+    await db.collection('abonos').doc(abonoEditandoId).update({ monto: nuevoMonto, nota: nuevaNota });
+    setSync('ok');
+    showToast('✅ Abono actualizado');
+    closeEditarAbonoModal();
+    if (clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo actualizar. Revisa tu conexión.');
+  }
+}
+async function eliminarAbono(){
+  if (soloAdmin()) return;
+  if (!abonoEditandoId) return;
+  if (!confirm('¿Seguro que quieres eliminar este abono? No se puede deshacer.')) return;
+  if (!confirm('Confirma otra vez: ¿ELIMINAR este abono definitivamente?')) return;
+  try{
+    setSync('busy');
+    await db.collection('abonos').doc(abonoEditandoId).delete();
+    setSync('ok');
+    showToast('🗑️ Abono eliminado');
+    closeEditarAbonoModal();
+    if (clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo eliminar. Revisa tu conexión.');
   }
 }
 
