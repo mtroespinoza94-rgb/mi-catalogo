@@ -518,10 +518,6 @@
         <select id="rUbicacion"><option value="">Todos</option></select>
       </div>
       <div class="field" style="margin-bottom:8px;">
-        <label>Categoría</label>
-        <select id="rCategoria"><option value="">Todas</option></select>
-      </div>
-      <div class="field" style="margin-bottom:8px;">
         <label>Grupo</label>
         <select id="rGrupo"><option value="">Todos</option></select>
       </div>
@@ -2341,13 +2337,6 @@ function poblarSelectsReportes(){
     ubicaciones.map(u => `<option value="${u}">${u}</option>`).join('');
   rUbicacion.value = actualU;
 
-  const rCategoria = document.getElementById('rCategoria');
-  const actualCat = rCategoria.value;
-  const categorias = [...new Set(state.ventas.map(v=>v.categoria).filter(Boolean))].sort();
-  rCategoria.innerHTML = '<option value="">Todas</option>' +
-    categorias.map(c => `<option value="${c}">${c}</option>`).join('');
-  rCategoria.value = actualCat;
-
   const rGrupo = document.getElementById('rGrupo');
   const actualG = rGrupo.value;
   rGrupo.innerHTML = '<option value="">Todos</option>' +
@@ -2358,14 +2347,12 @@ function poblarSelectsReportes(){
 function ventasFiltradasReporte(){
   const clienteId = document.getElementById('rCliente').value;
   const ubicacion = document.getElementById('rUbicacion').value;
-  const categoria = document.getElementById('rCategoria').value;
   const grupoId = document.getElementById('rGrupo').value;
   const desde = document.getElementById('rDesde').value;
   const hasta = document.getElementById('rHasta').value;
 
   return state.ventas.filter(v=>{
     if (clienteId && v.clienteId !== clienteId) return false;
-    if (categoria && v.categoria !== categoria) return false;
     if (grupoId && v.grupoId !== grupoId) return false;
     if (ubicacion){
       const c = state.clientes.find(x=>x.id===v.clienteId);
@@ -2379,11 +2366,11 @@ function ventasFiltradasReporte(){
 }
 
 function limpiarFiltrosReporte(){
-  ['rCliente','rUbicacion','rCategoria','rGrupo','rDesde','rHasta'].forEach(id => document.getElementById(id).value = '');
+  ['rCliente','rUbicacion','rGrupo','rDesde','rHasta'].forEach(id => document.getElementById(id).value = '');
   renderReportes();
 }
 
-['rCliente','rUbicacion','rCategoria','rGrupo','rDesde','rHasta'].forEach(id=>{
+['rCliente','rUbicacion','rGrupo','rDesde','rHasta'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderReportes);
 });
 
@@ -2393,9 +2380,29 @@ function renderReportes(){
 
   const totalVentas = ventas.reduce((s,v)=>s+v.precioMXN,0);
   const totalGanancia = ventas.reduce((s,v)=>s+v.ganancia,0);
+
+  // Saldo pendiente: si hay un cliente elegido, es el saldo de ese cliente
+  // (todas sus compras menos todos sus abonos); si no, es el total pendiente
+  // de cobro de todos los clientes.
+  const clienteFiltroId = document.getElementById('rCliente').value;
+  let saldoPendiente;
+  if (clienteFiltroId){
+    const totalCliente = state.ventas.filter(v=>v.clienteId===clienteFiltroId).reduce((s,v)=>s+v.precioMXN,0);
+    const abonadoCliente = state.abonos.filter(a=>a.clienteId===clienteFiltroId).reduce((s,a)=>s+a.monto,0);
+    saldoPendiente = totalCliente - abonadoCliente;
+  } else {
+    const totalTodos = state.ventas.reduce((s,v)=>s+v.precioMXN,0);
+    const abonadoTodos = state.abonos.reduce((s,a)=>s+a.monto,0);
+    saldoPendiente = totalTodos - abonadoTodos;
+  }
+
   document.getElementById('statsReportes').innerHTML = `
     <div class="stat-box"><div class="lbl">${ventas.length} registro(s)</div><div class="val mono">${fmtMXN(totalVentas)}</div></div>
     <div class="stat-box"><div class="lbl">Ganancia</div><div class="val mono" style="color:var(--profit)">${fmtMXN(totalGanancia)}</div></div>
+    <div class="stat-box" style="grid-column:1 / -1; ${saldoPendiente>0?'background:var(--danger-bg);':''}">
+      <div class="lbl">${clienteFiltroId ? 'Saldo pendiente de este cliente' : 'Saldo pendiente (todos los clientes)'}</div>
+      <div class="val mono" style="${saldoPendiente>0?'color:var(--danger)':''}">${fmtMXN(saldoPendiente)}</div>
+    </div>
   `;
 
   const tabla = document.getElementById('tablaReportes');
