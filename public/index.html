@@ -18,6 +18,8 @@
     --paper:#0f172a;
     --card:rgba(255,255,255,0.08);
     --border:rgba(255,255,255,0.18);
+    --ease:cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in:cubic-bezier(0.32, 0, 0.67, 0);
     --accent:#10B981;
     --profit:#6EE7B7;
     --profit-bg:rgba(16,185,129,0.16);
@@ -49,8 +51,15 @@
   .topbar p{ margin:2px 0 0; font-size:12px; color:rgba(255,255,255,0.6); }
 
   .screen{ display:none; padding:16px; max-width:520px; margin:0 auto; }
-  .screen.active{ display:block; animation:fadeIn .2s ease; }
-  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .screen.active{ display:block; animation:fadeIn .18s var(--ease); }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:translateY(0);} }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:0.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:0.01ms !important; scroll-behavior:auto !important;
+    }
+  }
 
   /* ---- Tag / ticket signature element ---- */
   .price-tag{
@@ -83,12 +92,12 @@
     font-size:15px; font-family:inherit; outline:none;
     background:rgba(255,255,255,0.05); color:var(--ink);
     backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
-    transition:all .3s ease;
+    transition:border-color .15s var(--ease), background-color .15s var(--ease), box-shadow .15s var(--ease);
   }
   .field input::placeholder, .field textarea::placeholder{ color:rgba(255,255,255,0.4); }
   .field input:focus, .field select:focus, .field textarea:focus{
-    border-color:var(--accent); background:rgba(255,255,255,0.12);
-    box-shadow:0 0 0 3px rgba(16,185,129,0.3);
+    border-color:var(--accent); background:rgba(255,255,255,0.1);
+    box-shadow:0 0 0 3px rgba(16,185,129,0.18);
   }
   .field.money input{ font-family:'IBM Plex Mono', monospace; font-weight:600; }
   .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -119,12 +128,13 @@
   }
 
   .btn{
-    width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.2);
+    width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.14);
     background:rgba(16,185,129,0.9); color:#FFFFFF; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
     font-size:15px; font-weight:600; cursor:pointer; font-family:'Space Grotesk',sans-serif;
-    box-shadow:0 4px 15px rgba(16,185,129,0.4); transition:all .3s ease;
+    box-shadow:0 2px 10px rgba(16,185,129,0.25);
+    transition:transform .12s var(--ease), background-color .15s var(--ease), box-shadow .15s var(--ease);
   }
-  .btn:active{ transform:scale(0.98); }
+  .btn:active{ transform:scale(0.97); transition-duration:.08s; }
   .btn.secondary{ background:rgba(255,255,255,0.06); color:var(--ink); border:1.5px solid var(--border); box-shadow:none; }
   .btn.small{ padding:9px 14px; font-size:13px; width:auto; }
 
@@ -133,7 +143,9 @@
     padding:7px 13px; border-radius:20px; border:1.5px solid var(--border);
     background:rgba(255,255,255,0.06); backdrop-filter:blur(4px);
     font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+    transition:background-color .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease), transform .12s var(--ease);
   }
+  .chip:active{ transform:scale(0.96); }
   .chip.active{ background:rgba(16,185,129,0.9); border-color:var(--accent); color:white; }
   #colorChips .chip{
     width:34px; height:34px; padding:0; border-radius:50%; display:flex;
@@ -153,10 +165,10 @@
   }
   .navbar button{
     flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px;
-    padding:6px 0; color:rgba(255,255,255,0.55); font-size:11px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer;
-    transition:all .3s ease;
+    padding:6px 0; color:rgba(255,255,255,0.5); font-size:11px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer;
+    transition:color .15s var(--ease);
   }
-  .navbar button.active{ color:var(--accent); text-shadow:0 0 15px rgba(16,185,129,0.5); }
+  .navbar button.active{ color:var(--accent); }
   .navbar svg{ width:22px; height:22px; }
 
   /* ---- Client list / detail ---- */
@@ -164,9 +176,10 @@
     background:var(--card); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     border:1px solid var(--border); border-radius:16px; padding:14px 16px;
     display:flex; align-items:center; gap:12px; margin-bottom:10px; cursor:pointer;
-    box-shadow:0 8px 32px 0 rgba(0,0,0,0.37); transition:transform .3s ease, background .3s ease;
+    box-shadow:0 4px 20px 0 rgba(0,0,0,0.25);
+    transition:transform .12s var(--ease), background-color .15s var(--ease);
   }
-  .client-card:active{ transform:scale(0.98); background:rgba(255,255,255,0.12); }
+  .client-card:active{ transform:scale(0.98); transition-duration:.08s; background:rgba(255,255,255,0.1); }
   .client-avatar{
     width:42px; height:42px; border-radius:50%; background:var(--profit-bg); color:var(--profit);
     display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0;
@@ -214,25 +227,27 @@
   .stat-box .val{ font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:18px; color:var(--ink); }
 
   .modal-overlay{
-    position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:flex-end;
+    position:fixed; inset:0; background:rgba(0,0,0,0.55); display:none; align-items:flex-end;
     justify-content:center; z-index:50; backdrop-filter:blur(2px);
+    animation:overlayIn .2s var(--ease);
   }
+  @keyframes overlayIn{ from{background:rgba(0,0,0,0);} to{background:rgba(0,0,0,0.55);} }
   .modal-overlay.show{ display:flex; }
   .modal-sheet{
     background:#111c33; backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
     border:1px solid var(--border); border-top:1px solid rgba(255,255,255,0.25);
     border-radius:20px 20px 0 0; width:100%; max-width:520px; padding:20px 18px calc(20px + env(safe-area-inset-bottom));
-    animation:slideUp .22s ease; color:var(--ink);
+    animation:slideUp .32s var(--ease); color:var(--ink);
     box-shadow:0 -10px 40px rgba(0,0,0,0.5);
   }
-  @keyframes slideUp{ from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+  @keyframes slideUp{ from{transform:translateY(24px); opacity:0;} to{transform:translateY(0); opacity:1;} }
   .modal-sheet h3{ margin:0 0 14px; font-size:16px; color:var(--ink); }
 
   .toast{
-    position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(10px);
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(6px);
     background:rgba(17,28,51,0.92); backdrop-filter:blur(8px); border:1px solid var(--border);
     color:white; padding:11px 18px; border-radius:10px; font-size:13px;
-    opacity:0; pointer-events:none; transition:all .2s; z-index:100; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .2s var(--ease), transform .25s var(--ease); z-index:100; white-space:nowrap;
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -243,7 +258,7 @@
     position:fixed; left:0; right:0; bottom:64px; z-index:19;
     padding:10px 16px; background:linear-gradient(to top, #0f172a 60%, transparent);
   }
-  .save-bar .btn{ max-width:520px; margin:0 auto; box-shadow:0 4px 15px rgba(16,185,129,0.4); }
+  .save-bar .btn{ max-width:520px; margin:0 auto; box-shadow:0 4px 16px rgba(16,185,129,0.28); }
 
   /* ---- Chips de clientes recientes (1 toque en vez de abrir el select) ---- */
   #clienteRecientesChips .chip.cliente-chip{ font-weight:600; }
