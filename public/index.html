@@ -980,18 +980,30 @@ auth.onAuthStateChanged(async (user)=>{
           return;
         }
         rolActual = datos.rol || 'visualizador';
-      } else {
-        rolActual = (user.uid === ADMIN_UID_FIJO) ? 'admin' : 'visualizador';
+      } else if (user.uid === ADMIN_UID_FIJO){
+        // Bootstrap: solo la cuenta admin original se auto-registra la primera vez.
+        rolActual = 'admin';
         await ref.set({
-          rol: rolActual,
+          rol: 'admin',
           usuario: (user.email || '').split('@')[0],
           email: user.email || '',
           activo: true,
           fecha: new Date().toISOString(),
         });
+      } else {
+        // Cualquier otra cuenta autenticada que NO haya sido creada por un
+        // admin desde "Usuarios" no tiene permiso — se cierra su sesión.
+        // Esto evita que alguien cree su propia cuenta directo contra
+        // Firebase (fuera de la app) y obtenga acceso.
+        await auth.signOut();
+        setTimeout(()=> {
+          document.getElementById('loginError').textContent = 'Esta cuenta no está autorizada. Pide al administrador que te dé de alta.';
+        }, 300);
+        return;
       }
     }catch(e){
-      rolActual = 'visualizador';
+      await auth.signOut();
+      return;
     }
 
     ocultarLogin();
@@ -1047,7 +1059,7 @@ function renderListaUsuariosAdmin(){
       <div style="padding:10px 0; border-bottom:1px solid var(--border);">
         <div style="display:flex; align-items:center; justify-content:space-between;">
           <div>
-            <div style="font-weight:600; font-size:13.5px;">${nombreMostrar}${!activo ? ' <span style="color:var(--danger); font-size:11px;">(desactivado)</span>' : ''}</div>
+            <div style="font-weight:600; font-size:13.5px;">${esc(nombreMostrar)}${!activo ? ' <span style="color:var(--danger); font-size:11px;">(desactivado)</span>' : ''}</div>
             <div style="font-size:11.5px; color:var(--ink-soft);">${esAdminUser ? 'Admin — puede modificar' : 'Visualizador — solo ver'}</div>
           </div>
         </div>
@@ -1078,22 +1090,19 @@ async function crearUsuarioNuevo(){
     const email = usuarioAEmail(usuario);
     const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
     const uid = cred.user.uid;
-    // El propio usuario nuevo se registra a sí mismo como visualizador
-    // (así lo exigen las reglas de seguridad para cualquier cuenta nueva).
-    await secondaryApp.firestore().collection('usuarios').doc(uid).set({
-      rol: 'visualizador',
+    await secondaryApp.auth().signOut();
+    await secondaryApp.delete();
+
+    // El registro del usuario en la base de datos lo hace el ADMIN desde su
+    // propia sesión (no el usuario nuevo) — así, si alguien crea una cuenta
+    // de Firebase por fuera de la app, nunca queda autorizada en Firestore.
+    await db.collection('usuarios').doc(uid).set({
+      rol: rolDeseado,
       usuario,
       email,
       activo: true,
       fecha: new Date().toISOString(),
     });
-    await secondaryApp.auth().signOut();
-    await secondaryApp.delete();
-
-    // Si el admin quiere que sea Admin, se actualiza desde la sesión del admin.
-    if (rolDeseado === 'admin'){
-      await db.collection('usuarios').doc(uid).update({ rol: 'admin' });
-    }
     showToast(`✅ Usuario "${usuario}" creado`);
     document.getElementById('uNombreUsuario').value = '';
     document.getElementById('uPasswordNuevo').value = '';
@@ -1305,6 +1314,18 @@ function actualizarTag(){
 
 function fmtMXN(n){ return '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 
+/* Evita que texto escrito por un usuario (nombre, comentario, nota, etc.)
+   se interprete como HTML/JavaScript al mostrarlo — protección contra XSS. */
+function esc(texto){
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 /* ============ CATEGORÍAS (chips) ============ */
 function renderCategoriaChips(){
   const wrap = document.getElementById('categoriaChips');
@@ -1357,7 +1378,7 @@ function renderGrupoSelect(){
   const actual = sel.value || prefs.grupoId || '';
   const gruposOrdenados = [...state.grupos].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   sel.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
-    gruposOrdenados.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
   sel.value = actual;
 }
 function soloAdmin(){
@@ -1396,7 +1417,7 @@ function renderLugarSelect(){
   if (!sel) return;
   const actual = sel.value;
   sel.innerHTML = '<option value="">— Selecciona un lugar —</option>' +
-    state.lugares.map(l => `<option value="${l.nombre}">${l.nombre}</option>`).join('');
+    state.lugares.map(l => `<option value="${esc(l.nombre)}">${esc(l.nombre)}</option>`).join('');
   sel.value = actual;
 }
 function openNewLugarModal(){
@@ -1434,7 +1455,7 @@ function renderListaLugaresAdmin(){
   }
   cont.innerHTML = state.lugares.map(l => `
     <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border);">
-      <span style="font-size:13.5px;">${l.nombre}</span>
+      <span style="font-size:13.5px;">${esc(l.nombre)}</span>
       <button onclick="eliminarLugar('${l.id}')" style="background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; cursor:pointer;">Eliminar</button>
     </div>
   `).join('');
@@ -1458,7 +1479,7 @@ function renderClienteSelect(){
   const actual = sel.value;
   const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   sel.innerHTML = '<option value="">— Selecciona un cliente —</option>' +
-    clientesOrdenados.map(c => `<option value="${c.id}">${c.alias ? c.nombre+' ('+c.alias+')' : c.nombre}</option>`).join('');
+    clientesOrdenados.map(c => `<option value="${c.id}">${c.alias ? esc(c.nombre)+' ('+esc(c.alias)+')' : esc(c.nombre)}</option>`).join('');
   sel.value = actual;
 }
 
@@ -1475,7 +1496,7 @@ function renderClienteRecientesChips(){
   const actual = document.getElementById('fCliente').value;
   wrap.innerHTML = recientes.map(c => {
     const nombreCorto = c.alias || c.nombre.split(' ')[0];
-    return `<div class="chip cliente-chip ${c.id===actual?'active':''}" onclick="seleccionarClienteChip('${c.id}')">${nombreCorto}</div>`;
+    return `<div class="chip cliente-chip ${c.id===actual?'active':''}" onclick="seleccionarClienteChip('${c.id}')">${esc(nombreCorto)}</div>`;
   }).join('');
 }
 function seleccionarClienteChip(id){
@@ -1649,14 +1670,14 @@ function renderFiltrosClientes(){
     // Grupo más reciente primero (por fecha de creación del grupo)
     const gruposRecientes = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
     selGrupo.innerHTML = '<option value="">Todos los grupos</option>' +
-      gruposRecientes.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+      gruposRecientes.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
     selGrupo.value = clientesFiltroGrupo;
   }
   const selUbicacion = document.getElementById('clientesFiltroUbicacionSelect');
   if (selUbicacion){
     const ubicacionesRecientes = [...state.lugares].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
     selUbicacion.innerHTML = '<option value="">Todas</option>' +
-      ubicacionesRecientes.map(l => `<option value="${l.nombre}">${l.nombre}</option>`).join('');
+      ubicacionesRecientes.map(l => `<option value="${esc(l.nombre)}">${esc(l.nombre)}</option>`).join('');
     selUbicacion.value = clientesFiltroUbicacion;
   }
 }
@@ -1704,8 +1725,8 @@ function renderClientes(){
       <div class="client-card" onclick="verDetalleCliente('${c.id}')">
         <div class="client-avatar" style="background:${col.bg}; color:${col.hex};">${iniciales}</div>
         <div class="client-info">
-          <div class="client-name">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400;">(${c.alias})</span>` : ''}</div>
-          ${c.ubicacion ? `<span class="platform-badge" style="background:rgba(59,130,246,0.18); color:#93C5FD; border:1px solid rgba(59,130,246,0.35);">📍 ${c.ubicacion}</span>` : ''}
+          <div class="client-name">${esc(c.nombre)}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400;">(${esc(c.alias)})</span>` : ''}</div>
+          ${c.ubicacion ? `<span class="platform-badge" style="background:rgba(59,130,246,0.18); color:#93C5FD; border:1px solid rgba(59,130,246,0.35);">📍 ${esc(c.ubicacion)}</span>` : ''}
         </div>
         <div class="client-total">
           <div class="amt" style="${c.saldo > 0 ? 'color:var(--danger)' : ''}">${fmtMXN(c.saldo)}</div>
@@ -1850,13 +1871,13 @@ function verDetalleCliente(id, mantenerPantalla){
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
         <div class="client-avatar" style="width:52px;height:52px;font-size:17px; background:${col.bg}; color:${col.hex};">${c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase()}</div>
         <div style="flex:1;">
-          <h3 style="margin:0; font-size:17px;">${c.nombre}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${c.alias})</span>` : ''}</h3>
+          <h3 style="margin:0; font-size:17px;">${esc(c.nombre)}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${esc(c.alias)})</span>` : ''}</h3>
         </div>
         ${rolActual === 'admin' ? `<button class="btn secondary small" onclick="openEditClientModal('${c.id}')">Editar</button>` : ''}
       </div>
-      ${c.telefono ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📱 ${c.telefono}</div>` : ''}
-      ${c.ubicacion ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📍 ${c.ubicacion}</div>` : ''}
-      ${c.notas ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📝 ${c.notas}</div>` : ''}
+      ${c.telefono ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📱 ${esc(c.telefono)}</div>` : ''}
+      ${c.ubicacion ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📍 ${esc(c.ubicacion)}</div>` : ''}
+      ${c.notas ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📝 ${esc(c.notas)}</div>` : ''}
     </div>
 
     <div class="stat-row">
@@ -1877,7 +1898,7 @@ function verDetalleCliente(id, mantenerPantalla){
           <div class="order-item" ${rolActual === 'admin' ? `onclick="abrirEditarAbono('${a.id}')" style="cursor:pointer;"` : ''}>
             <div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:16px; background:var(--profit-bg);">💵</div>
             <div>
-              <div class="oi-name">${a.nota || 'Abono'}</div>
+              <div class="oi-name">${esc(a.nota) || 'Abono'}</div>
               <div class="oi-meta">${new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
             </div>
             <div class="oi-price" style="color:var(--profit)">+${fmtMXN(a.monto)}</div>
@@ -1890,7 +1911,7 @@ function verDetalleCliente(id, mantenerPantalla){
     ${gruposDelCliente.length > 0 ? `
       <div class="chip-row">
         <div class="chip ${clienteDetalleGrupoFiltro===''?'active':''}" onclick="seleccionarGrupoDetalleCliente('')">Todos (${fmtMXN(total)})</div>
-        ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${g.nombre}</div>`).join('')}
+        ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${esc(g.nombre)}</div>`).join('')}
       </div>
       ${clienteDetalleGrupoFiltro ? `<p style="font-size:12.5px; color:var(--ink-soft); margin:-4px 0 10px;">Total en este grupo: <strong>${fmtMXN(totalFiltrado)}</strong></p>` : ''}
     ` : ''}
@@ -1901,9 +1922,9 @@ function verDetalleCliente(id, mantenerPantalla){
           <div class="order-item" onclick="abrirEditarVenta('${v.id}')" style="cursor:pointer;">
             ${v.foto ? `<img class="order-thumb" src="${v.foto}">` : `<div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>`}
             <div>
-              <div class="oi-name">${v.nombre}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
-              <div class="oi-meta">${v.categoria}${v.grupoId && getGrupo(v.grupoId) ? ' · '+getGrupo(v.grupoId).nombre : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
-              ${v.comentarios ? `<div class="oi-meta" style="font-style:italic;">💬 ${v.comentarios}</div>` : ''}
+              <div class="oi-name">${esc(v.nombre)}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
+              <div class="oi-meta">${esc(v.categoria)}${v.grupoId && getGrupo(v.grupoId) ? ' · '+esc(getGrupo(v.grupoId).nombre) : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
+              ${v.comentarios ? `<div class="oi-meta" style="font-style:italic;">💬 ${esc(v.comentarios)}</div>` : ''}
             </div>
             <div class="oi-price">${fmtMXN(v.precioMXN)}</div>
           </div>
@@ -1989,13 +2010,13 @@ function activarEdicionVenta(){
   document.getElementById('ventaEditTitulo').textContent = 'Editar venta';
   const sel = document.getElementById('vCliente');
   const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
-  sel.innerHTML = clientesOrdenados.map(cl => `<option value="${cl.id}">${cl.alias ? cl.nombre+' ('+cl.alias+')' : cl.nombre}</option>`).join('');
+  sel.innerHTML = clientesOrdenados.map(cl => `<option value="${cl.id}">${cl.alias ? esc(cl.nombre)+' ('+esc(cl.alias)+')' : esc(cl.nombre)}</option>`).join('');
   sel.value = v.clienteId;
 
   const selGrupo = document.getElementById('vGrupo');
   const gruposOrdenados = [...state.grupos].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   selGrupo.innerHTML = '<option value="">— Sin grupo —</option>' +
-    gruposOrdenados.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
   selGrupo.value = v.grupoId || '';
 
   document.getElementById('vCostoUSD').value = v.costoUSD || 0;
@@ -2264,7 +2285,7 @@ function renderGrupoFiltroSelect(){
   if (!sel) return;
   const gruposOrdenados = [...state.grupos].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   sel.innerHTML = '<option value="">Todos los grupos</option>' +
-    gruposOrdenados.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
   sel.value = grupoFiltroActivo;
 }
 function seleccionarGrupoFiltroSelect(id){ grupoFiltroActivo = id; renderHistorial(); }
@@ -2326,9 +2347,9 @@ function renderHistorial(){
       <div class="order-item" onclick="abrirEditarVenta('${v.id}')" style="cursor:pointer;">
         ${v.foto ? `<img class="order-thumb" src="${v.foto}">` : `<div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>`}
         <div>
-          <div class="oi-name">${v.nombre}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
-          <div class="oi-meta">${c ? c.nombre : 'Cliente eliminado'}${g ? ' · '+g.nombre : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short'})}</div>
-          ${v.comentarios ? `<div class="oi-meta" style="font-style:italic;">💬 ${v.comentarios}</div>` : ''}
+          <div class="oi-name">${esc(v.nombre)}${v.cantidad > 1 ? ` <span style="color:var(--gold); font-weight:700;">×${v.cantidad}</span>` : ''}</div>
+          <div class="oi-meta">${c ? esc(c.nombre) : 'Cliente eliminado'}${g ? ' · '+esc(g.nombre) : ''} · ${new Date(v.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short'})}</div>
+          ${v.comentarios ? `<div class="oi-meta" style="font-style:italic;">💬 ${esc(v.comentarios)}</div>` : ''}
         </div>
         <div class="oi-price">${fmtMXN(v.precioMXN)}<div style="font-size:10.5px; color:var(--profit); font-weight:600;">+${fmtMXN(v.ganancia)}</div></div>
       </div>
@@ -2342,7 +2363,7 @@ function poblarSelectsReportes(){
   const actualC = rCliente.value;
   const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   rCliente.innerHTML = '<option value="">Todos</option>' +
-    clientesOrdenados.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    clientesOrdenados.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
   rCliente.value = actualC;
 
   const rUbicacion = document.getElementById('rUbicacion');
@@ -2355,7 +2376,7 @@ function poblarSelectsReportes(){
   const rGrupo = document.getElementById('rGrupo');
   const actualG = rGrupo.value;
   rGrupo.innerHTML = '<option value="">Todos</option>' +
-    state.grupos.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+    state.grupos.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
   rGrupo.value = actualG;
 }
 
@@ -2432,12 +2453,12 @@ function renderReportes(){
       const g = v.grupoId ? getGrupo(v.grupoId) : null;
       return `<tr>
         <td>${new Date(v.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}</td>
-        <td>${v.nombre}</td>
+        <td>${esc(v.nombre)}</td>
         <td>${v.cantidad || 1}</td>
-        <td>${c ? c.nombre : '—'}</td>
-        <td>${c && c.ubicacion ? c.ubicacion : '—'}</td>
-        <td>${v.categoria || '—'}</td>
-        <td>${g ? g.nombre : '—'}</td>
+        <td>${c ? esc(c.nombre) : '—'}</td>
+        <td>${c && c.ubicacion ? esc(c.ubicacion) : '—'}</td>
+        <td>${esc(v.categoria) || '—'}</td>
+        <td>${g ? esc(g.nombre) : '—'}</td>
         <td class="mono">${fmtMXN(v.precioMXN)}</td>
         <td class="mono" style="color:var(--profit)">${fmtMXN(v.ganancia)}</td>
       </tr>`;
