@@ -298,7 +298,7 @@
   .filtros-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
   /* ---- Escritura en mayúsculas ---- */
-  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota, #buscarCliente, #vComentarios, #fComentarios{
+  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota, #buscarCliente, #vComentarios, #fComentarios, #nvcNombre, #nvcComentarios{
     text-transform:uppercase;
   }
   #fNombre::placeholder, #mNombre::placeholder, #mAlias::placeholder, #gNombre::placeholder, #lgNombre::placeholder, #buscarCliente::placeholder{
@@ -874,6 +874,80 @@
         <button class="btn" id="btnGuardarEdicionVenta" onclick="guardarEdicionVenta()">Guardar cambios</button>
       </div>
       <button class="btn" id="btnEliminarVenta" style="background:var(--danger);" onclick="eliminarVenta()">🗑️ Eliminar esta venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL NUEVA VENTA DESDE PERFIL DE CLIENTE ============ -->
+<div class="modal-overlay" id="modalNuevaVentaCliente">
+  <div class="modal-sheet">
+    <h3>Nueva venta</h3>
+    <p style="margin:-8px 0 14px; font-size:12.5px; color:var(--ink-soft);">Para <strong id="nvcClienteNombre"></strong></p>
+
+    <div class="field">
+      <label>Fotos del producto (puedes agregar varias)</label>
+      <div id="nvcFotosGrid" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('nvcFotoInputCamara').click();">📷 Tomar foto</button>
+        <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('nvcFotoInputGaleria').click();">🖼️ Galería</button>
+      </div>
+      <input type="file" id="nvcFotoInputCamara" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="nvcFotoInputGaleria" accept="image/*" multiple style="display:none;">
+    </div>
+
+    <div class="field">
+      <label>Nombre del producto</label>
+      <input type="text" id="nvcNombre" placeholder="Ej. Decant Odyssey Aqua 10ml">
+    </div>
+
+    <div class="field">
+      <label>Grupo de ventas</label>
+      <select id="nvcGrupo"><option value="">— Selecciona un grupo —</option></select>
+    </div>
+
+    <div class="field">
+      <label>Cantidad</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="cambiarCantidadNVC(-1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">−</button>
+        <input type="number" id="nvcCantidad" value="1" min="1" step="1" inputmode="numeric" style="text-align:center; max-width:80px; font-weight:700;">
+        <button type="button" onclick="cambiarCantidadNVC(1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">+</button>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="field money">
+        <label>Costo por unidad (USD)</label>
+        <input type="number" id="nvcCostoUSD" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+      <div class="field money">
+        <label>Tipo de cambio</label>
+        <input type="number" id="nvcTipoCambio" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="field money">
+        <label>Impuesto (%)</label>
+        <input type="number" id="nvcImpuesto" step="0.1" inputmode="decimal">
+      </div>
+      <div class="field money">
+        <label>Precio de venta total (MXN)</label>
+        <input type="number" id="nvcPrecio" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Comentarios (opcional)</label>
+      <textarea id="nvcComentarios" rows="2" placeholder="Opcional"></textarea>
+    </div>
+
+    <div class="tag-row" style="margin:6px 0 14px;">
+      <span class="tag-label">Ganancia</span>
+      <span class="tag-value mono" id="nvcGananciaPreview">$0.00</span>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button class="btn secondary" onclick="closeNuevaVentaClienteModal()">Cancelar</button>
+      <button class="btn" id="btnGuardarNVC" onclick="guardarNuevaVentaCliente()">Guardar venta</button>
     </div>
   </div>
 </div>
@@ -1626,7 +1700,7 @@ function forzarMayusculas(id){
     if (start !== null && end !== null) el.setSelectionRange(start, end);
   });
 }
-['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','eaNota','buscarCliente','vComentarios','fComentarios'].forEach(forzarMayusculas);
+['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','eaNota','buscarCliente','vComentarios','fComentarios','nvcNombre','nvcComentarios'].forEach(forzarMayusculas);
 
 /* ============ PLATAFORMAS (chips en modal cliente) ============ */
 function renderPlataformaChips(){
@@ -2169,7 +2243,10 @@ function verDetalleCliente(id, mantenerPantalla){
       <div class="stat-box"><div class="lbl">Productos</div><div class="val">${ventas.length}</div></div>
     </div>
 
-    ${rolActual === 'admin' ? `<button class="btn" onclick="openAbonoModal('${c.id}')">+ Registrar abono</button>` : ''}
+    <div style="display:flex; gap:8px;">
+      ${rolActual === 'admin' ? `<button class="btn" style="flex:1;" onclick="openNuevaVentaClienteModal('${c.id}')">+ Agregar venta</button>` : ''}
+      ${rolActual === 'admin' ? `<button class="btn" style="flex:1;" onclick="openAbonoModal('${c.id}')">+ Registrar abono</button>` : ''}
+    </div>
 
     <div class="section-title">Abonos registrados</div>
     <div class="card" style="padding:6px 16px;">
@@ -2471,6 +2548,151 @@ async function eliminarVenta(){
 }
 
 /* ============ ABONOS ============ */
+/* ============ NUEVA VENTA DESDE PERFIL DE CLIENTE ============ */
+let fotosNVC = [];
+function openNuevaVentaClienteModal(clienteId){
+  if (soloAdmin()) return;
+  const c = state.clientes.find(x=>x.id===clienteId);
+  if (!c) return;
+  clienteDetalleId = clienteId;
+  document.getElementById('nvcClienteNombre').textContent = c.nombre;
+  document.getElementById('nvcNombre').value = '';
+  document.getElementById('nvcCantidad').value = 1;
+  document.getElementById('nvcCostoUSD').value = '';
+  document.getElementById('nvcTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
+  document.getElementById('nvcImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
+  document.getElementById('nvcPrecio').value = '';
+  document.getElementById('nvcComentarios').value = '';
+  fotosNVC = [];
+  renderFotosGridNVC();
+
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  const selGrupo = document.getElementById('nvcGrupo');
+  selGrupo.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
+  selGrupo.value = clienteDetalleGrupoFiltro || '';
+
+  actualizarGananciaNVC();
+  document.getElementById('modalNuevaVentaCliente').classList.add('show');
+  pushNavState('modalNuevaVentaCliente');
+  setTimeout(()=> document.getElementById('nvcNombre').focus(), 100);
+}
+function closeNuevaVentaClienteModal(){
+  document.getElementById('modalNuevaVentaCliente').classList.remove('show');
+}
+
+function cambiarCantidadNVC(delta){
+  const input = document.getElementById('nvcCantidad');
+  const actual = parseInt(input.value) || 1;
+  input.value = Math.max(1, actual + delta);
+  actualizarGananciaNVC();
+}
+
+function renderFotosGridNVC(){
+  const grid = document.getElementById('nvcFotosGrid');
+  const miniaturas = fotosNVC.map((f, i) => `
+    <div class="foto-thumb">
+      <img src="${f}">
+      <button type="button" class="foto-quitar" onclick="quitarFotoNVC(${i})">✕</button>
+    </div>
+  `).join('');
+  grid.innerHTML = miniaturas;
+}
+function quitarFotoNVC(index){
+  fotosNVC.splice(index, 1);
+  renderFotosGridNVC();
+}
+function procesarFotoNVC(file){
+  if (!file) return;
+  if (fotosNVC.length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos por venta`); return; }
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      const maxW = 500;
+      const scale = Math.min(1, maxW / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      fotosNVC.push(canvas.toDataURL('image/jpeg', 0.65));
+      renderFotosGridNVC();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('nvcFotoInputCamara').addEventListener('change', (e)=>{ procesarFotoNVC(e.target.files[0]); e.target.value=''; });
+document.getElementById('nvcFotoInputGaleria').addEventListener('change', (e)=>{
+  Array.from(e.target.files).forEach(f => procesarFotoNVC(f));
+  e.target.value = '';
+});
+
+function actualizarGananciaNVC(){
+  const costoUSD = parseFloat(document.getElementById('nvcCostoUSD').value) || 0;
+  const tipoCambio = parseFloat(document.getElementById('nvcTipoCambio').value) || 0;
+  const impuestoPct = parseFloat(document.getElementById('nvcImpuesto').value) || 0;
+  const precio = parseFloat(document.getElementById('nvcPrecio').value) || 0;
+  const cantidad = Math.max(1, parseInt(document.getElementById('nvcCantidad').value) || 1);
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const costoTotal = (costoUnitMXN + costoUnitMXN * (impuestoPct/100)) * cantidad;
+  const ganancia = precio - costoTotal;
+  const el = document.getElementById('nvcGananciaPreview');
+  el.textContent = fmtMXN(ganancia);
+  el.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
+}
+['nvcCostoUSD','nvcTipoCambio','nvcImpuesto','nvcPrecio','nvcCantidad'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', actualizarGananciaNVC);
+});
+
+async function guardarNuevaVentaCliente(){
+  if (soloAdmin()) return;
+  const nombre = document.getElementById('nvcNombre').value.trim();
+  const grupoId = document.getElementById('nvcGrupo').value;
+  const cantidad = Math.max(1, parseInt(document.getElementById('nvcCantidad').value) || 1);
+  const costoUSD = parseFloat(document.getElementById('nvcCostoUSD').value) || 0;
+  const tipoCambio = parseFloat(document.getElementById('nvcTipoCambio').value) || 0;
+  const impuestoPct = parseFloat(document.getElementById('nvcImpuesto').value) || 0;
+  const precioMXN = parseFloat(document.getElementById('nvcPrecio').value) || 0;
+  const comentarios = document.getElementById('nvcComentarios').value.trim();
+
+  if (!nombre){ showToast('⚠️ Falta el nombre del producto'); return; }
+  if (!grupoId){ showToast('⚠️ Selecciona un grupo de ventas'); return; }
+  if (!precioMXN){ showToast('⚠️ Falta el precio de venta'); return; }
+
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const impuestoUnitMonto = costoUnitMXN * (impuestoPct / 100);
+  const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
+  const impuestoMonto = impuestoUnitMonto * cantidad;
+  const ganancia = precioMXN - costoTotal;
+
+  const btn = document.getElementById('btnGuardarNVC');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try{
+    setSync('busy');
+    await db.collection('ventas').add({
+      nombre, categoria: 'Otro', foto: fotosNVC[0] || null, fotos: fotosNVC,
+      cantidad, comentarios,
+      costoUSD, tipoCambio, impuestoPct, impuestoMonto,
+      precioUnitarioMXN: precioMXN / cantidad,
+      costoMXN: costoTotal, precioMXN, ganancia,
+      clienteId: clienteDetalleId, grupoId,
+      fecha: new Date().toISOString(),
+    });
+    setSync('ok');
+    showToast('✅ Venta agregada');
+    closeNuevaVentaClienteModal();
+    verDetalleCliente(clienteDetalleId, true);
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar venta';
+  }
+}
+
 function openAbonoModal(clienteId){
   if (soloAdmin()) return;
   clienteDetalleId = clienteId;
