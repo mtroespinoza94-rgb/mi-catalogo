@@ -521,48 +521,103 @@
 
 <!-- ============ REPORTES ============ -->
 <div class="screen" id="screenReportes">
-  <div class="card">
-    <div class="section-title" style="margin-top:0;">Filtros</div>
-    <div class="filtros-grid">
-      <div class="field" style="margin-bottom:8px;">
-        <label>Cliente</label>
-        <select id="rCliente"><option value="">Todos</option></select>
-      </div>
-      <div class="field" style="margin-bottom:8px;">
-        <label>Lugar / ubicación</label>
-        <select id="rUbicacion"><option value="">Todos</option></select>
-      </div>
-      <div class="field" style="margin-bottom:8px;">
-        <label>Grupo</label>
-        <select id="rGrupo"><option value="">Todos</option></select>
-      </div>
-      <div class="field" style="margin-bottom:8px;">
-        <label>Desde</label>
-        <input type="date" id="rDesde">
-      </div>
-      <div class="field" style="margin-bottom:8px;">
-        <label>Hasta</label>
-        <input type="date" id="rHasta">
-      </div>
-    </div>
-    <button class="btn secondary small" style="width:100%;" onclick="limpiarFiltrosReporte()">Limpiar filtros</button>
+  <div class="chip-row">
+    <div class="chip active" id="tabBtnVentas" onclick="cambiarTabReportes('ventas')">Ventas</div>
+    <div class="chip" id="tabBtnGastos" onclick="cambiarTabReportes('gastos')">Gastos</div>
   </div>
 
-  <div class="stat-row" id="statsReportes"></div>
+  <div id="tabVentasReportes">
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Filtros</div>
+      <div class="filtros-grid">
+        <div class="field" style="margin-bottom:8px;">
+          <label>Cliente</label>
+          <select id="rCliente"><option value="">Todos</option></select>
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Lugar / ubicación</label>
+          <select id="rUbicacion"><option value="">Todos</option></select>
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Grupo</label>
+          <select id="rGrupo"><option value="">Todos</option></select>
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Desde</label>
+          <input type="date" id="rDesde">
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Hasta</label>
+          <input type="date" id="rHasta">
+        </div>
+      </div>
+      <button class="btn secondary small" style="width:100%;" onclick="limpiarFiltrosReporte()">Limpiar filtros</button>
+    </div>
 
-  <button class="btn" onclick="exportarExcel()">⬇️ Exportar a Excel</button>
-  <p style="font-size:11.5px; color:var(--ink-soft); text-align:center; margin:8px 0 16px;">
-    Se descarga un .xlsx — ábrelo directo en Excel, o súbelo a Google Sheets con "Archivo → Importar".
-  </p>
+    <div class="stat-row" id="statsReportes"></div>
 
-  <div class="section-title">Resultados</div>
-  <div class="card report-table-wrap" style="padding:6px;">
-    <table class="report-table" id="tablaReportes"></table>
+    <button class="btn" onclick="exportarExcel()">⬇️ Exportar a Excel</button>
+    <p style="font-size:11.5px; color:var(--ink-soft); text-align:center; margin:8px 0 16px;">
+      Se descarga un .xlsx — ábrelo directo en Excel, o súbelo a Google Sheets con "Archivo → Importar".
+    </p>
+
+    <div class="section-title">Resultados</div>
+    <div class="card report-table-wrap" style="padding:6px;">
+      <table class="report-table" id="tablaReportes"></table>
+    </div>
+  </div>
+
+  <div id="tabGastosReportes" style="display:none;">
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Grupo</div>
+      <select id="gGrupoSelect" onchange="seleccionarGrupoGastos(this.value)">
+        <option value="">— Selecciona un grupo —</option>
+      </select>
+    </div>
+
+    <div id="gastosContenido" style="display:none;">
+      <div class="stat-row">
+        <div class="stat-box"><div class="lbl">Ganancia de ventas (bruta)</div><div class="val mono" style="color:var(--profit)" id="gGananciaBruta">$0.00</div></div>
+        <div class="stat-box"><div class="lbl">Gastos totales</div><div class="val mono" style="color:var(--danger)" id="gTotalGastos">$0.00</div></div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box" style="grid-column:1 / -1;"><div class="lbl">Ganancia neta (después de gastos)</div><div class="val mono" id="gGananciaNeta">$0.00</div></div>
+      </div>
+
+      <div class="card" id="cardAgregarGasto">
+        <div class="section-title" style="margin-top:0;">Agregar gasto</div>
+        <div class="field">
+          <label>Concepto</label>
+          <select id="gConcepto">
+            <option value="Dólares">Dólares</option>
+            <option value="Tarjeta de crédito">Tarjeta de crédito</option>
+            <option value="Viáticos">Viáticos</option>
+            <option value="Caseta">Caseta</option>
+            <option value="Gasolina">Gasolina</option>
+            <option value="Otros gastos">Otros gastos</option>
+            <option value="__otro__">Otro (escribir)</option>
+          </select>
+        </div>
+        <div class="field" id="gConceptoOtroWrap" style="display:none;">
+          <label>¿Cuál?</label>
+          <input type="text" id="gConceptoOtro" placeholder="Ej. Empaque">
+        </div>
+        <div class="field money">
+          <label>Monto (MXN)</label>
+          <input type="number" id="gMonto" placeholder="0.00" step="0.01" inputmode="decimal">
+        </div>
+        <button class="btn" onclick="guardarGasto()">+ Agregar gasto</button>
+      </div>
+
+      <div class="section-title">Gastos registrados</div>
+      <div class="card" style="padding:6px 16px;" id="listaGastos"></div>
+    </div>
   </div>
 </div>
 
 <!-- ============ NAVBAR ============ -->
 <div class="navbar">
+
   <button class="nav-btn active" data-screen="screenNueva" onclick="goTo('screenNueva')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
     Nueva venta
@@ -757,6 +812,10 @@
       <input type="number" id="aMonto" placeholder="0.00" step="0.01" inputmode="decimal">
     </div>
     <div class="field">
+      <label>Aplicar a un grupo (opcional)</label>
+      <select id="aGrupo"><option value="">— General (todos los grupos) —</option></select>
+    </div>
+    <div class="field">
       <label>Nota (opcional)</label>
       <input type="text" id="aNota" placeholder="Ej. Pago por transferencia">
     </div>
@@ -886,7 +945,7 @@ function loadPrefs(){
 function savePrefs(){ localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 
 let prefs = loadPrefs();
-let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [], usuarios: [] };
+let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [], usuarios: [], gastos: [] };
 let fotosBase64 = [];
 let categoriaSeleccionada = CATEGORIAS[0];
 let plataformaSeleccionada = 'instagram';
@@ -1021,7 +1080,7 @@ function aplicarPermisosUI(){
   const esAdmin = rolActual === 'admin';
   const navNueva = document.querySelector('.nav-btn[data-screen="screenNueva"]');
   if (navNueva) navNueva.style.display = esAdmin ? '' : 'none';
-  ['btnNuevoCliente','btnNuevoGrupo','btnNuevoLugar'].forEach(id=>{
+  ['btnNuevoCliente','btnNuevoGrupo','btnNuevoLugar','cardAgregarGasto'].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.display = esAdmin ? '' : 'none';
   });
@@ -1176,7 +1235,7 @@ function goTo(screenId){
 
   if (screenId === 'screenClientes') renderClientes();
   if (screenId === 'screenHistorial') renderHistorial();
-  if (screenId === 'screenReportes') renderReportes();
+  if (screenId === 'screenReportes'){ renderReportes(); renderGastosTab(); }
   if (screenId === 'screenNueva'){
     setTimeout(()=> document.getElementById('fNombre').focus(), 50);
   }
@@ -1722,7 +1781,7 @@ function renderClientes(){
     const col = getColorCliente(c.color);
     const iniciales = c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase();
     return `
-      <div class="client-card" onclick="verDetalleCliente('${c.id}')">
+      <div class="client-card" style="border-left:4px solid ${col.hex};" onclick="verDetalleCliente('${c.id}')">
         <div class="client-avatar" style="background:${col.bg}; color:${col.hex};">${iniciales}</div>
         <div class="client-info">
           <div class="client-name">${esc(c.nombre)}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400;">(${esc(c.alias)})</span>` : ''}</div>
@@ -1864,6 +1923,10 @@ function verDetalleCliente(id, mantenerPantalla){
     ? todasLasVentas.filter(v => v.grupoId === clienteDetalleGrupoFiltro)
     : todasLasVentas;
   const totalFiltrado = ventas.reduce((s,v)=>s+v.precioMXN,0);
+  const abonadoFiltrado = clienteDetalleGrupoFiltro
+    ? abonos.filter(a => a.grupoId === clienteDetalleGrupoFiltro).reduce((s,a)=>s+a.monto,0)
+    : totalAbonado;
+  const saldoFiltrado = totalFiltrado - abonadoFiltrado;
 
   document.getElementById('screenDetalleCliente').innerHTML = `
     <button class="btn secondary small" style="margin-bottom:14px;" onclick="goTo('screenClientes')">← Volver a clientes</button>
@@ -1899,7 +1962,7 @@ function verDetalleCliente(id, mantenerPantalla){
             <div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:16px; background:var(--profit-bg);">💵</div>
             <div>
               <div class="oi-name">${esc(a.nota) || 'Abono'}</div>
-              <div class="oi-meta">${new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
+              <div class="oi-meta">${a.grupoId && getGrupo(a.grupoId) ? esc(getGrupo(a.grupoId).nombre) + ' · ' : ''}${new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
             </div>
             <div class="oi-price" style="color:var(--profit)">+${fmtMXN(a.monto)}</div>
           </div>
@@ -1913,7 +1976,15 @@ function verDetalleCliente(id, mantenerPantalla){
         <div class="chip ${clienteDetalleGrupoFiltro===''?'active':''}" onclick="seleccionarGrupoDetalleCliente('')">Todos (${fmtMXN(total)})</div>
         ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${esc(g.nombre)}</div>`).join('')}
       </div>
-      ${clienteDetalleGrupoFiltro ? `<p style="font-size:12.5px; color:var(--ink-soft); margin:-4px 0 10px;">Total en este grupo: <strong>${fmtMXN(totalFiltrado)}</strong></p>` : ''}
+      ${clienteDetalleGrupoFiltro ? `
+        <div class="stat-row">
+          <div class="stat-box"><div class="lbl">Debe (este grupo)</div><div class="val mono">${fmtMXN(totalFiltrado)}</div></div>
+          <div class="stat-box"><div class="lbl">Abonado (este grupo)</div><div class="val mono" style="color:var(--profit)">${fmtMXN(abonadoFiltrado)}</div></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box" style="${saldoFiltrado>0?'background:var(--danger-bg);':''}"><div class="lbl">Saldo pendiente (este grupo)</div><div class="val mono" style="${saldoFiltrado>0?'color:var(--danger)':''}">${fmtMXN(saldoFiltrado)}</div></div>
+        </div>
+      ` : ''}
     ` : ''}
     <button class="btn secondary" style="margin-bottom:14px;" onclick="exportarReporteClientePDF()">📄 Exportar / compartir estado de cuenta (PDF)</button>
     <div class="card" style="padding:6px 16px;">
@@ -2190,6 +2261,13 @@ function openAbonoModal(clienteId){
   document.getElementById('abonoClienteNombre').textContent = c.nombre;
   document.getElementById('aMonto').value = '';
   document.getElementById('aNota').value = '';
+  const gruposCliente = [...new Set(state.ventas.filter(v=>v.clienteId===clienteId).map(v=>v.grupoId).filter(Boolean))]
+    .map(gid => getGrupo(gid)).filter(Boolean)
+    .sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  const selGrupo = document.getElementById('aGrupo');
+  selGrupo.innerHTML = '<option value="">— General (todos los grupos) —</option>' +
+    gruposCliente.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
+  selGrupo.value = '';
   document.getElementById('modalAbono').classList.add('show');
   pushNavState('modalAbono');
   setTimeout(()=> document.getElementById('aMonto').focus(), 100);
@@ -2204,6 +2282,7 @@ async function guardarAbono(){
     await db.collection('abonos').add({
       clienteId: clienteDetalleId,
       monto,
+      grupoId: document.getElementById('aGrupo').value || null,
       nota: document.getElementById('aNota').value.trim(),
       fecha: new Date().toISOString(),
     });
@@ -2466,6 +2545,139 @@ function renderReportes(){
   `;
 }
 
+/* ============ REPORTES: PESTAÑAS (Ventas / Gastos) ============ */
+function cambiarTabReportes(tab){
+  const esVentas = tab === 'ventas';
+  document.getElementById('tabBtnVentas').classList.toggle('active', esVentas);
+  document.getElementById('tabBtnGastos').classList.toggle('active', !esVentas);
+  document.getElementById('tabVentasReportes').style.display = esVentas ? 'block' : 'none';
+  document.getElementById('tabGastosReportes').style.display = esVentas ? 'none' : 'block';
+  if (!esVentas) renderGastosTab();
+}
+
+let grupoGastosActivo = '';
+function seleccionarGrupoGastos(grupoId){
+  grupoGastosActivo = grupoId;
+  renderGastosTab();
+}
+document.getElementById('gConcepto').addEventListener('change', function(){
+  document.getElementById('gConceptoOtroWrap').style.display = this.value === '__otro__' ? 'block' : 'none';
+});
+
+function renderGastosTab(){
+  const sel = document.getElementById('gGrupoSelect');
+  if (!sel) return;
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  sel.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
+  sel.value = grupoGastosActivo;
+
+  const contenido = document.getElementById('gastosContenido');
+  if (!grupoGastosActivo){ contenido.style.display = 'none'; return; }
+  contenido.style.display = 'block';
+
+  const gananciaBruta = state.ventas.filter(v=>v.grupoId===grupoGastosActivo).reduce((s,v)=>s+v.ganancia,0);
+  const gastosGrupo = state.gastos.filter(g=>g.grupoId===grupoGastosActivo).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
+  const totalGastos = gastosGrupo.reduce((s,g)=>s+g.monto,0);
+  const gananciaNeta = gananciaBruta - totalGastos;
+
+  document.getElementById('gGananciaBruta').textContent = fmtMXN(gananciaBruta);
+  document.getElementById('gTotalGastos').textContent = fmtMXN(totalGastos);
+  const netaEl = document.getElementById('gGananciaNeta');
+  netaEl.textContent = fmtMXN(gananciaNeta);
+  netaEl.style.color = gananciaNeta < 0 ? 'var(--danger)' : 'var(--profit)';
+
+  const lista = document.getElementById('listaGastos');
+  if (gastosGrupo.length === 0){
+    lista.innerHTML = '<p style="color:var(--ink-soft); font-size:13px; padding:12px 0;">Sin gastos registrados en este grupo.</p>';
+    return;
+  }
+  lista.innerHTML = gastosGrupo.map(g => `
+    <div class="order-item">
+      <div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:16px; background:var(--danger-bg);">💸</div>
+      <div style="${rolActual==='admin' ? 'cursor:pointer;' : ''}" ${rolActual==='admin' ? `onclick="abrirEditarGasto('${g.id}')"` : ''}>
+        <div class="oi-name">${esc(g.concepto)}</div>
+        <div class="oi-meta">${new Date(g.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
+      </div>
+      <div class="oi-price" style="color:var(--danger)">-${fmtMXN(g.monto)}</div>
+      ${rolActual==='admin' ? `<button onclick="eliminarGastoDirecto('${g.id}')" style="background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:4px 0 4px 8px;">🗑️</button>` : ''}
+    </div>
+  `).join('');
+}
+
+async function guardarGasto(){
+  if (soloAdmin()) return;
+  if (!grupoGastosActivo){ showToast('⚠️ Selecciona un grupo primero'); return; }
+  const conceptoSel = document.getElementById('gConcepto').value;
+  const concepto = conceptoSel === '__otro__'
+    ? document.getElementById('gConceptoOtro').value.trim()
+    : conceptoSel;
+  const monto = parseFloat(document.getElementById('gMonto').value) || 0;
+  if (!concepto){ showToast('⚠️ Falta el concepto del gasto'); return; }
+  if (monto <= 0){ showToast('⚠️ Ingresa un monto válido'); return; }
+
+  try{
+    setSync('busy');
+    await db.collection('gastos').add({
+      grupoId: grupoGastosActivo,
+      concepto,
+      monto,
+      fecha: new Date().toISOString(),
+    });
+    setSync('ok');
+    document.getElementById('gMonto').value = '';
+    document.getElementById('gConceptoOtro').value = '';
+    showToast(`✅ Gasto de ${fmtMXN(monto)} agregado`);
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
+  }
+}
+
+let gastoEditandoId = null;
+function abrirEditarGasto(id){
+  if (soloAdmin()) return;
+  const g = state.gastos.find(x=>x.id===id);
+  if (!g) return;
+  gastoEditandoId = id;
+  const nuevoConcepto = prompt('Concepto del gasto:', g.concepto);
+  if (nuevoConcepto === null) return;
+  const nuevoMontoStr = prompt('Monto (MXN):', g.monto);
+  if (nuevoMontoStr === null) return;
+  const nuevoMonto = parseFloat(nuevoMontoStr);
+  if (!nuevoConcepto.trim() || isNaN(nuevoMonto) || nuevoMonto <= 0){
+    showToast('⚠️ Datos inválidos, no se guardó el cambio');
+    return;
+  }
+  if (nuevoConcepto.trim() === g.concepto && Math.abs(nuevoMonto - g.monto) < 0.005) return;
+  if (!confirm(`¿Confirmas guardar este gasto?\n\n${esc(nuevoConcepto)}: ${fmtMXN(nuevoMonto)}`)) return;
+  guardarEdicionGasto(id, nuevoConcepto.trim(), nuevoMonto);
+}
+async function guardarEdicionGasto(id, concepto, monto){
+  try{
+    setSync('busy');
+    await db.collection('gastos').doc(id).update({ concepto, monto });
+    setSync('ok');
+    showToast('✅ Gasto actualizado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo actualizar.');
+  }
+}
+async function eliminarGastoDirecto(id){
+  if (soloAdmin()) return;
+  if (!confirm('¿Eliminar este gasto? No se puede deshacer.')) return;
+  try{
+    setSync('busy');
+    await db.collection('gastos').doc(id).delete();
+    setSync('ok');
+    showToast('🗑️ Gasto eliminado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo eliminar.');
+  }
+}
+
 function exportarExcel(){
   const ventas = ventasFiltradasReporte();
   if (ventas.length === 0){ showToast('⚠️ No hay registros para exportar con estos filtros'); return; }
@@ -2539,7 +2751,7 @@ function iniciarApp(){
     const activa = document.querySelector('.screen.active');
     if (activa && activa.id === 'screenClientes') renderClientes();
     if (activa && activa.id === 'screenHistorial') renderHistorial();
-    if (activa && activa.id === 'screenReportes') renderReportes();
+    if (activa && activa.id === 'screenReportes'){ renderReportes(); renderGastosTab(); }
     if (activa && activa.id === 'screenDetalleCliente' && clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
   };
 
@@ -2558,6 +2770,7 @@ function iniciarApp(){
   listenersActivos.push(suscribir('abonos', 'abonos'));
   listenersActivos.push(suscribir('lugares', 'lugares'));
   listenersActivos.push(suscribir('usuarios', 'usuarios'));
+  listenersActivos.push(suscribir('gastos', 'gastos'));
 }
 
 /* ============ PWA: registrar service worker ============ */
