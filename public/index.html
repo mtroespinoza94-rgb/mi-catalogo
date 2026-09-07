@@ -521,10 +521,10 @@
 
 <!-- ============ REPORTES ============ -->
 <div class="screen" id="screenReportes">
-  <button class="btn secondary" id="btnRespaldoTotal" onclick="exportarRespaldoTotal()" style="margin-bottom:14px;">📤 Respaldar todo y compartir (Excel)</button>
   <div class="chip-row">
     <div class="chip active" id="tabBtnVentas" onclick="cambiarTabReportes('ventas')">Ventas</div>
     <div class="chip" id="tabBtnGastos" onclick="cambiarTabReportes('gastos')">Gastos</div>
+    <div class="chip" id="tabBtnRespaldo" onclick="cambiarTabReportes('respaldo')">Respaldo</div>
   </div>
 
   <div id="tabVentasReportes">
@@ -612,6 +612,20 @@
 
       <div class="section-title">Gastos registrados</div>
       <div class="card" style="padding:6px 16px;" id="listaGastos"></div>
+    </div>
+  </div>
+
+  <div id="tabRespaldoReportes" style="display:none;">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:38px; margin-bottom:8px;">📤</div>
+      <h3 style="margin:0 0 8px;">Respaldo completo</h3>
+      <p style="font-size:13px; color:var(--ink-soft); margin-bottom:18px;">
+        Descarga o comparte un Excel con todo lo registrado en la plataforma: clientes, ventas (con fechas y grupo), abonos, gastos, grupos y lugares.
+      </p>
+      <button class="btn" id="btnRespaldoTotal" onclick="exportarRespaldoTotal()">📤 Respaldar todo y compartir (Excel)</button>
+      <p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px;">
+        Se abre el menú de compartir del celular (ej. WhatsApp), o se descarga directo si no está disponible.
+      </p>
     </div>
   </div>
 </div>
@@ -2564,12 +2578,13 @@ function renderReportes(){
 
 /* ============ REPORTES: PESTAÑAS (Ventas / Gastos) ============ */
 function cambiarTabReportes(tab){
-  const esVentas = tab === 'ventas';
-  document.getElementById('tabBtnVentas').classList.toggle('active', esVentas);
-  document.getElementById('tabBtnGastos').classList.toggle('active', !esVentas);
-  document.getElementById('tabVentasReportes').style.display = esVentas ? 'block' : 'none';
-  document.getElementById('tabGastosReportes').style.display = esVentas ? 'none' : 'block';
-  if (!esVentas) renderGastosTab();
+  document.getElementById('tabBtnVentas').classList.toggle('active', tab === 'ventas');
+  document.getElementById('tabBtnGastos').classList.toggle('active', tab === 'gastos');
+  document.getElementById('tabBtnRespaldo').classList.toggle('active', tab === 'respaldo');
+  document.getElementById('tabVentasReportes').style.display = tab === 'ventas' ? 'block' : 'none';
+  document.getElementById('tabGastosReportes').style.display = tab === 'gastos' ? 'block' : 'none';
+  document.getElementById('tabRespaldoReportes').style.display = tab === 'respaldo' ? 'block' : 'none';
+  if (tab === 'gastos') renderGastosTab();
 }
 
 let grupoGastosActivo = '';
