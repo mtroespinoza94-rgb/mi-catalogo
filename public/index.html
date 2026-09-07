@@ -521,6 +521,7 @@
 
 <!-- ============ REPORTES ============ -->
 <div class="screen" id="screenReportes">
+  <button class="btn secondary" id="btnRespaldoTotal" onclick="exportarRespaldoTotal()" style="margin-bottom:14px;">📤 Respaldar todo y compartir (Excel)</button>
   <div class="chip-row">
     <div class="chip active" id="tabBtnVentas" onclick="cambiarTabReportes('ventas')">Ventas</div>
     <div class="chip" id="tabBtnGastos" onclick="cambiarTabReportes('gastos')">Gastos</div>
@@ -2675,6 +2676,94 @@ async function eliminarGastoDirecto(id){
   }catch(e){
     setSync('err');
     showToast('⚠️ No se pudo eliminar.');
+  }
+}
+
+/* ============ RESPALDO COMPLETO (todas las hojas) ============ */
+async function exportarRespaldoTotal(){
+  const btn = document.getElementById('btnRespaldoTotal');
+  btn.disabled = true; const textoOriginal = btn.textContent; btn.textContent = 'Preparando respaldo...';
+
+  try{
+    const wb = XLSX.utils.book_new();
+
+    // ---- Clientes ----
+    const clientesData = state.clientes.map(c=>{
+      const ventasCliente = state.ventas.filter(v=>v.clienteId===c.id);
+      const totalCliente = ventasCliente.reduce((s,v)=>s+v.precioMXN,0);
+      const abonadoCliente = state.abonos.filter(a=>a.clienteId===c.id).reduce((s,a)=>s+a.monto,0);
+      return {
+        'Nombre': c.nombre, 'Alias': c.alias||'', 'Teléfono': c.telefono||'',
+        'Ubicación': c.ubicacion||'', 'Notas': c.notas||'',
+        'Total comprado': Number(totalCliente.toFixed(2)),
+        'Abonado': Number(abonadoCliente.toFixed(2)),
+        'Saldo pendiente': Number((totalCliente-abonadoCliente).toFixed(2)),
+      };
+    });
+    if (clientesData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(clientesData), 'Clientes');
+
+    // ---- Ventas ----
+    const ventasData = state.ventas.map(v=>{
+      const c = state.clientes.find(x=>x.id===v.clienteId);
+      const g = v.grupoId ? getGrupo(v.grupoId) : null;
+      return {
+        'Fecha': new Date(v.fecha).toLocaleDateString('es-MX'),
+        'Producto': v.nombre, 'Cantidad': v.cantidad||1, 'Categoría': v.categoria||'',
+        'Cliente': c ? c.nombre : '', 'Grupo': g ? g.nombre : '',
+        'Costo USD': v.costoUSD||0, 'Tipo de cambio': v.tipoCambio||0,
+        'Precio MXN': Number(v.precioMXN.toFixed(2)), 'Ganancia MXN': Number(v.ganancia.toFixed(2)),
+        'Comentarios': v.comentarios||'',
+      };
+    });
+    if (ventasData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ventasData), 'Ventas');
+
+    // ---- Abonos ----
+    const abonosData = state.abonos.map(a=>{
+      const c = state.clientes.find(x=>x.id===a.clienteId);
+      const g = a.grupoId ? getGrupo(a.grupoId) : null;
+      return {
+        'Fecha': new Date(a.fecha).toLocaleDateString('es-MX'),
+        'Cliente': c ? c.nombre : '', 'Grupo': g ? g.nombre : 'General',
+        'Monto': Number(a.monto.toFixed(2)), 'Nota': a.nota||'',
+      };
+    });
+    if (abonosData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(abonosData), 'Abonos');
+
+    // ---- Gastos ----
+    const gastosData = state.gastos.map(g=>{
+      const grupo = g.grupoId ? getGrupo(g.grupoId) : null;
+      return {
+        'Fecha': new Date(g.fecha).toLocaleDateString('es-MX'),
+        'Grupo': grupo ? grupo.nombre : '', 'Concepto': g.concepto, 'Monto': Number(g.monto.toFixed(2)),
+      };
+    });
+    if (gastosData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gastosData), 'Gastos');
+
+    if (wb.SheetNames.length === 0){
+      showToast('⚠️ No hay datos todavía para respaldar');
+      return;
+    }
+
+    const nombreArchivo = `respaldo-mi-catalogo-${new Date().toISOString().slice(0,10)}.xlsx`;
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    try{
+      const archivo = new File([blob], nombreArchivo, { type: blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })){
+        await navigator.share({ files: [archivo], title: 'Respaldo Mi Catálogo', text: `Respaldo del ${new Date().toLocaleDateString('es-MX')}` });
+        showToast('✅ Respaldo listo para compartir');
+        return;
+      }
+    }catch(e){
+      // si cancela compartir, cae a descarga normal
+    }
+    XLSX.writeFile(wb, nombreArchivo);
+    showToast('📥 Respaldo descargado');
+  }catch(e){
+    showToast('⚠️ No se pudo generar el respaldo.');
+  }finally{
+    btn.disabled = false; btn.textContent = textoOriginal;
   }
 }
 
