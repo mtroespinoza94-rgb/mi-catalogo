@@ -876,6 +876,19 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- ============ CANDADO: RESPALDO SEMANAL OBLIGATORIO ============ -->
+<div id="candadoRespaldo" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(15,23,42,0.97); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:24px;">
+  <div class="modal-sheet" style="border-radius:20px; max-width:420px; text-align:center;">
+    <div style="font-size:44px; margin-bottom:6px;">🔒</div>
+    <h3 style="margin-bottom:8px;">Respaldo semanal pendiente</h3>
+    <p style="font-size:13.5px; color:var(--ink-soft); margin-bottom:18px;">
+      Cada viernes al mediodía la app se bloquea hasta descargar el respaldo completo de la base de datos (clientes, ventas, grupos, abonos y gastos). Descárgalo para poder seguir trabajando.
+    </p>
+    <button class="btn" onclick="exportarRespaldoTotal()">📤 Descargar / compartir respaldo ahora</button>
+    <button class="btn secondary" style="margin-top:10px;" onclick="cerrarSesion()">Cerrar sesión</button>
+  </div>
+</div>
+
 <!-- ============ VISOR DE FOTO AMPLIADA ============ -->
 <div id="visorFoto" onclick="cerrarFotoAmpliada()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:300; align-items:center; justify-content:center; padding:20px;">
   <img id="visorFotoImg" src="" style="max-width:100%; max-height:100%; object-fit:contain; border-radius:8px;">
@@ -1072,6 +1085,9 @@ auth.onAuthStateChanged(async (user)=>{
     listenersActivos.forEach(unsub => unsub());
     listenersActivos = [];
     appIniciada = false;
+    if (intervaloCandadoRespaldo){ clearInterval(intervaloCandadoRespaldo); intervaloCandadoRespaldo = null; }
+    const candado = document.getElementById('candadoRespaldo');
+    if (candado) candado.style.display = 'none';
     mostrarLogin();
   }
 });
@@ -2739,6 +2755,19 @@ async function exportarRespaldoTotal(){
     });
     if (gastosData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gastosData), 'Gastos');
 
+    // ---- Grupos ----
+    const gruposData = state.grupos.map(g=>({
+      'Grupo': g.nombre,
+      'Fecha de creación': g.fecha ? new Date(g.fecha).toLocaleDateString('es-MX') : '',
+      'Total vendido': Number(state.ventas.filter(v=>v.grupoId===g.id).reduce((s,v)=>s+v.precioMXN,0).toFixed(2)),
+      'Total gastos': Number(state.gastos.filter(x=>x.grupoId===g.id).reduce((s,x)=>s+x.monto,0).toFixed(2)),
+    }));
+    if (gruposData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gruposData), 'Grupos');
+
+    // ---- Lugares ----
+    const lugaresData = state.lugares.map(l=>({ 'Lugar': l.nombre }));
+    if (lugaresData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lugaresData), 'Lugares');
+
     if (wb.SheetNames.length === 0){
       showToast('⚠️ No hay datos todavía para respaldar');
       return;
@@ -2753,6 +2782,7 @@ async function exportarRespaldoTotal(){
       if (navigator.canShare && navigator.canShare({ files: [archivo] })){
         await navigator.share({ files: [archivo], title: 'Respaldo Mi Catálogo', text: `Respaldo del ${new Date().toLocaleDateString('es-MX')}` });
         showToast('✅ Respaldo listo para compartir');
+        await marcarRespaldoRealizado();
         return;
       }
     }catch(e){
@@ -2760,11 +2790,21 @@ async function exportarRespaldoTotal(){
     }
     XLSX.writeFile(wb, nombreArchivo);
     showToast('📥 Respaldo descargado');
+    await marcarRespaldoRealizado();
   }catch(e){
     showToast('⚠️ No se pudo generar el respaldo.');
   }finally{
     btn.disabled = false; btn.textContent = textoOriginal;
   }
+}
+
+async function marcarRespaldoRealizado(){
+  try{
+    await db.collection('sistema').doc('respaldos').set({
+      ultimoRespaldo: new Date().toISOString(),
+    }, { merge: true });
+  }catch(e){ /* si falla, el candado seguirá activo hasta que se logre guardar */ }
+  verificarBloqueoRespaldo();
 }
 
 function exportarExcel(){
@@ -2860,6 +2900,52 @@ function iniciarApp(){
   listenersActivos.push(suscribir('lugares', 'lugares'));
   listenersActivos.push(suscribir('usuarios', 'usuarios'));
   listenersActivos.push(suscribir('gastos', 'gastos'));
+
+  // Candado de respaldo semanal: escucha en tiempo real cuándo fue el último
+  // respaldo, y revisa cada minuto si ya toca bloquear (viernes 12:00).
+  listenersActivos.push(
+    db.collection('sistema').doc('respaldos').onSnapshot(
+      (snap) => {
+        ultimoRespaldoFecha = (snap.exists && snap.data().ultimoRespaldo) ? new Date(snap.data().ultimoRespaldo) : null;
+        verificarBloqueoRespaldo();
+      },
+      () => { verificarBloqueoRespaldo(); }
+    )
+  );
+  if (!intervaloCandadoRespaldo){
+    intervaloCandadoRespaldo = setInterval(verificarBloqueoRespaldo, 60000);
+  }
+}
+
+/* ============ CANDADO: RESPALDO SEMANAL OBLIGATORIO ============ */
+let ultimoRespaldoFecha = null;
+let intervaloCandadoRespaldo = null;
+
+function viernesDeReferencia(){
+  const ahora = new Date();
+  const dia = ahora.getDay(); // 0=domingo ... 5=viernes ... 6=sábado
+  let diasDesdeViernes;
+  if (dia === 5){
+    diasDesdeViernes = (ahora.getHours() >= 12) ? 0 : 7;
+  } else if (dia === 6){
+    diasDesdeViernes = 1;
+  } else {
+    diasDesdeViernes = dia + 2; // domingo(0)->2 ... jueves(4)->6
+  }
+  const ref = new Date(ahora);
+  ref.setDate(ahora.getDate() - diasDesdeViernes);
+  ref.setHours(12, 0, 0, 0);
+  return ref;
+}
+
+function verificarBloqueoRespaldo(){
+  const candado = document.getElementById('candadoRespaldo');
+  if (!candado) return;
+  if (rolActual !== 'admin'){ candado.style.display = 'none'; return; }
+
+  const refViernes = viernesDeReferencia();
+  const bloqueado = !ultimoRespaldoFecha || ultimoRespaldoFecha < refViernes;
+  candado.style.display = bloqueado ? 'flex' : 'none';
 }
 
 /* ============ PWA: registrar service worker ============ */
