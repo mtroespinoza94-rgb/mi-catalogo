@@ -347,6 +347,7 @@
       <p id="topSub"><span class="sync-dot" id="syncDot"></span><span id="topSubText">Control de ventas y clientes</span> <span id="rolBadge" style="display:none; background:var(--gold-bg); color:var(--gold); font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; margin-left:4px;">👁 SOLO LECTURA</span></p>
     </div>
     <div style="display:flex; align-items:center; gap:2px;">
+      <button id="btnConfiguracion" onclick="abrirModalConfiguracion()" title="Configuración" style="display:none; background:none;border:none;color:#9FB0A9;font-size:11px;cursor:pointer;padding:4px 8px 4px 0;">⚙️ Config</button>
       <button id="btnUsuarios" onclick="abrirModalUsuarios()" title="Gestionar usuarios" style="display:none; background:none;border:none;color:#9FB0A9;font-size:11px;cursor:pointer;padding:4px 8px 4px 0;">👥 Usuarios</button>
       <button id="btnLogout" onclick="cerrarSesion()" title="Cerrar sesión" style="background:none;border:none;color:#9FB0A9;font-size:11px;cursor:pointer;padding:4px 0;">Salir</button>
     </div>
@@ -707,6 +708,41 @@
     </div>
     <div class="section-title">Lugares existentes</div>
     <div id="listaLugaresAdmin" style="max-height:180px; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL CONFIGURACIÓN (solo admin) ============ -->
+<div class="modal-overlay" id="modalConfiguracion">
+  <div class="modal-sheet">
+    <h3>Configuración</h3>
+
+    <div class="section-title" style="margin-top:0;">Recordatorio de respaldo</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:-4px 0 12px;">Define cuándo se bloquea la app hasta que se descargue el respaldo.</p>
+    <div class="two-col">
+      <div class="field">
+        <label>Día de la semana</label>
+        <select id="cfgDiaBloqueo">
+          <option value="0">Domingo</option>
+          <option value="1">Lunes</option>
+          <option value="2">Martes</option>
+          <option value="3">Miércoles</option>
+          <option value="4">Jueves</option>
+          <option value="5">Viernes</option>
+          <option value="6">Sábado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Hora</label>
+        <input type="time" id="cfgHoraBloqueo">
+      </div>
+    </div>
+    <button class="btn" onclick="guardarConfiguracionBloqueo()">Guardar recordatorio</button>
+
+    <div class="section-title">Grupos de ventas</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:-4px 0 12px;">Edita o elimina los grupos existentes.</p>
+    <div id="listaGruposAdmin" style="max-height:220px; overflow-y:auto; margin-bottom:16px;"></div>
+
+    <button class="btn secondary" onclick="closeModalConfiguracion()">Cerrar</button>
   </div>
 </div>
 
@@ -1122,12 +1158,118 @@ function aplicarPermisosUI(){
   });
   const btnUsuarios = document.getElementById('btnUsuarios');
   if (btnUsuarios) btnUsuarios.style.display = esAdmin ? '' : 'none';
+  const btnConfig = document.getElementById('btnConfiguracion');
+  if (btnConfig) btnConfig.style.display = esAdmin ? '' : 'none';
   const badge = document.getElementById('rolBadge');
   if (badge) badge.style.display = esAdmin ? 'none' : 'inline';
   if (!esAdmin) goTo('screenHistorial');
 }
 
 /* ============ GESTIÓN DE USUARIOS (solo admin) ============ */
+/* ============ CONFIGURACIÓN (solo admin) ============ */
+let configuracionBloqueo = { diaBloqueo: 5, horaBloqueo: '12:00' };
+
+function abrirModalConfiguracion(){
+  if (soloAdmin()) return;
+  document.getElementById('cfgDiaBloqueo').value = String(configuracionBloqueo.diaBloqueo);
+  document.getElementById('cfgHoraBloqueo').value = configuracionBloqueo.horaBloqueo;
+  renderListaGruposAdmin();
+  document.getElementById('modalConfiguracion').classList.add('show');
+  pushNavState('modalConfiguracion');
+}
+function closeModalConfiguracion(){ document.getElementById('modalConfiguracion').classList.remove('show'); }
+
+async function guardarConfiguracionBloqueo(){
+  if (soloAdmin()) return;
+  const dia = parseInt(document.getElementById('cfgDiaBloqueo').value);
+  const hora = document.getElementById('cfgHoraBloqueo').value || '12:00';
+  try{
+    setSync('busy');
+    await db.collection('sistema').doc('configuracion').set({ diaBloqueo: dia, horaBloqueo: hora }, { merge: true });
+    setSync('ok');
+    showToast('✅ Recordatorio actualizado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo guardar.');
+  }
+}
+
+const NOMBRES_DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+function renderListaGruposAdmin(){
+  const cont = document.getElementById('listaGruposAdmin');
+  if (!cont) return;
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  if (gruposOrdenados.length === 0){
+    cont.innerHTML = '<p style="color:var(--ink-soft); font-size:12.5px; padding:8px 0;">Aún no hay grupos creados.</p>';
+    return;
+  }
+  cont.innerHTML = gruposOrdenados.map(g=>{
+    const totalGrupo = state.ventas.filter(v=>v.grupoId===g.id).reduce((s,v)=>s+v.precioMXN,0);
+    const numVentas = state.ventas.filter(v=>v.grupoId===g.id).length;
+    return `
+      <div style="padding:10px 0; border-bottom:1px solid var(--border);">
+        <div style="font-weight:600; font-size:13.5px;">${esc(g.nombre)}</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">${numVentas} venta(s) · ${fmtMXN(totalGrupo)}</div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn small secondary" style="flex:1; font-size:11.5px; padding:6px;" onclick="renombrarGrupo('${g.id}')">Renombrar</button>
+          <button class="btn small" style="flex:1; font-size:11.5px; padding:6px; background:var(--danger);" onclick="eliminarGrupoAdmin('${g.id}')">Eliminar</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function renombrarGrupo(id){
+  if (soloAdmin()) return;
+  const g = state.grupos.find(x=>x.id===id);
+  if (!g) return;
+  const nuevoNombre = prompt('Nuevo nombre del grupo:', g.nombre);
+  if (nuevoNombre === null) return;
+  const limpio = nuevoNombre.trim().toUpperCase();
+  if (!limpio || limpio === g.nombre) return;
+  if (!confirm(`¿Confirmas renombrar "${g.nombre}" a "${limpio}"?`)) return;
+  try{
+    setSync('busy');
+    await db.collection('grupos').doc(id).update({ nombre: limpio });
+    setSync('ok');
+    showToast('✅ Grupo renombrado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo renombrar.');
+  }
+}
+
+async function eliminarGrupoAdmin(id){
+  if (soloAdmin()) return;
+  const g = state.grupos.find(x=>x.id===id);
+  if (!g) return;
+  const ventasGrupo = state.ventas.filter(v=>v.grupoId===id);
+  const totalGrupo = ventasGrupo.reduce((s,v)=>s+v.precioMXN,0);
+
+  let mensaje = `¿Seguro que quieres eliminar el grupo "${g.nombre}"?`;
+  if (ventasGrupo.length > 0){
+    mensaje += `\n\nEste grupo tiene ${ventasGrupo.length} venta(s) registradas, por un total de ${fmtMXN(totalGrupo)}. Esas ventas NO se eliminarán, solo dejarán de pertenecer a un grupo.`;
+  }
+  mensaje += '\n\nEsta acción no se puede deshacer.';
+  if (!confirm(mensaje)) return;
+
+  try{
+    setSync('busy');
+    const batch = db.batch();
+    ventasGrupo.forEach(v => batch.update(db.collection('ventas').doc(v.id), { grupoId: null }));
+    state.abonos.filter(a=>a.grupoId===id).forEach(a => batch.update(db.collection('abonos').doc(a.id), { grupoId: null }));
+    state.gastos.filter(x=>x.grupoId===id).forEach(x => batch.update(db.collection('gastos').doc(x.id), { grupoId: null }));
+    batch.delete(db.collection('grupos').doc(id));
+    await batch.commit();
+    setSync('ok');
+    showToast('🗑️ Grupo eliminado');
+    renderListaGruposAdmin();
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo eliminar el grupo.');
+  }
+}
+
 function abrirModalUsuarios(){
   if (soloAdmin()) return;
   document.getElementById('uNombreUsuario').value = '';
@@ -2921,8 +3063,23 @@ function iniciarApp(){
   listenersActivos.push(suscribir('usuarios', 'usuarios'));
   listenersActivos.push(suscribir('gastos', 'gastos'));
 
-  // Candado de respaldo semanal: escucha en tiempo real cuándo fue el último
-  // respaldo, y revisa cada minuto si ya toca bloquear (viernes 12:00).
+  // Candado de respaldo semanal: escucha en tiempo real la configuración y
+  // cuándo fue el último respaldo, y revisa cada minuto si ya toca bloquear.
+  listenersActivos.push(
+    db.collection('sistema').doc('configuracion').onSnapshot(
+      (snap) => {
+        if (snap.exists){
+          const d = snap.data();
+          configuracionBloqueo = {
+            diaBloqueo: (d.diaBloqueo !== undefined) ? d.diaBloqueo : 5,
+            horaBloqueo: d.horaBloqueo || '12:00',
+          };
+        }
+        verificarBloqueoRespaldo();
+      },
+      () => { verificarBloqueoRespaldo(); }
+    )
+  );
   listenersActivos.push(
     db.collection('sistema').doc('respaldos').onSnapshot(
       (snap) => {
@@ -2943,18 +3100,20 @@ let intervaloCandadoRespaldo = null;
 
 function viernesDeReferencia(){
   const ahora = new Date();
-  const dia = ahora.getDay(); // 0=domingo ... 5=viernes ... 6=sábado
-  let diasDesdeViernes;
-  if (dia === 5){
-    diasDesdeViernes = (ahora.getHours() >= 12) ? 0 : 7;
-  } else if (dia === 6){
-    diasDesdeViernes = 1;
-  } else {
-    diasDesdeViernes = dia + 2; // domingo(0)->2 ... jueves(4)->6
-  }
+  const diaObjetivo = configuracionBloqueo.diaBloqueo;
+  const [horaObj, minObj] = (configuracionBloqueo.horaBloqueo || '12:00').split(':').map(Number);
+  const dia = ahora.getDay();
+
+  let diasAtras = (dia - diaObjetivo + 7) % 7;
   const ref = new Date(ahora);
-  ref.setDate(ahora.getDate() - diasDesdeViernes);
-  ref.setHours(12, 0, 0, 0);
+  ref.setDate(ahora.getDate() - diasAtras);
+  ref.setHours(horaObj, minObj || 0, 0, 0);
+
+  // Si hoy es el día del bloqueo pero aún no llega la hora, el de referencia
+  // es el de la semana pasada (todavía no toca bloquear hoy).
+  if (diasAtras === 0 && ref > ahora){
+    ref.setDate(ref.getDate() - 7);
+  }
   return ref;
 }
 
