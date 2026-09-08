@@ -962,8 +962,8 @@
       <input type="number" id="aMonto" placeholder="0.00" step="0.01" inputmode="decimal">
     </div>
     <div class="field">
-      <label>Aplicar a un grupo (opcional)</label>
-      <select id="aGrupo"><option value="">— General (todos los grupos) —</option></select>
+      <label>¿A qué grupo se abona?</label>
+      <select id="aGrupo"><option value="">— Selecciona un grupo —</option></select>
     </div>
     <div class="field">
       <label>Nota (opcional)</label>
@@ -2201,7 +2201,6 @@ function verDetalleCliente(id, mantenerPantalla){
   const abonos = state.abonos.filter(a=>a.clienteId===id).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
   const total = todasLasVentas.reduce((s,v)=>s+v.precioMXN,0);
   const totalAbonado = abonos.reduce((s,a)=>s+a.monto,0);
-  const saldo = total - totalAbonado;
   const col = getColorCliente(c.color);
 
   // Grupos en los que este cliente tiene compras, para el filtro
@@ -2210,14 +2209,18 @@ function verDetalleCliente(id, mantenerPantalla){
   if (clienteDetalleGrupoFiltro && !gruposDelCliente.some(g=>g.id===clienteDetalleGrupoFiltro)){
     clienteDetalleGrupoFiltro = '';
   }
+  const grupoActivo = clienteDetalleGrupoFiltro ? getGrupo(clienteDetalleGrupoFiltro) : null;
+
+  // Las tarjetas de arriba (Total / Abonado / Saldo / Productos) siempre
+  // reflejan lo que está seleccionado: un grupo específico, o todo junto.
   const ventas = clienteDetalleGrupoFiltro
     ? todasLasVentas.filter(v => v.grupoId === clienteDetalleGrupoFiltro)
     : todasLasVentas;
-  const totalFiltrado = ventas.reduce((s,v)=>s+v.precioMXN,0);
-  const abonadoFiltrado = clienteDetalleGrupoFiltro
+  const totalMostrado = clienteDetalleGrupoFiltro ? ventas.reduce((s,v)=>s+v.precioMXN,0) : total;
+  const abonadoMostrado = clienteDetalleGrupoFiltro
     ? abonos.filter(a => a.grupoId === clienteDetalleGrupoFiltro).reduce((s,a)=>s+a.monto,0)
     : totalAbonado;
-  const saldoFiltrado = totalFiltrado - abonadoFiltrado;
+  const saldoMostrado = totalMostrado - abonadoMostrado;
 
   document.getElementById('screenDetalleCliente').innerHTML = `
     <button class="btn secondary small" style="margin-bottom:14px;" onclick="goTo('screenClientes')">← Volver a clientes</button>
@@ -2234,12 +2237,23 @@ function verDetalleCliente(id, mantenerPantalla){
       ${c.notas ? `<div style="font-size:13px; color:var(--ink-soft); margin-top:6px;">📝 ${esc(c.notas)}</div>` : ''}
     </div>
 
+    ${gruposDelCliente.length > 0 ? `
+      <div class="section-title" style="margin-top:0;">Ver por grupo</div>
+      <div class="chip-row">
+        <div class="chip ${clienteDetalleGrupoFiltro===''?'active':''}" onclick="seleccionarGrupoDetalleCliente('')">Todos los grupos</div>
+        ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${esc(g.nombre)}</div>`).join('')}
+      </div>
+    ` : ''}
+    <p style="font-size:13px; color:var(--ink-soft); margin:-4px 0 12px;">
+      Mostrando: <strong style="color:var(--ink);">${grupoActivo ? esc(grupoActivo.nombre) : 'Todos los grupos (cuenta general)'}</strong>
+    </p>
+
     <div class="stat-row">
-      <div class="stat-box"><div class="lbl">Total comprado</div><div class="val mono">${fmtMXN(total)}</div></div>
-      <div class="stat-box"><div class="lbl">Abonado</div><div class="val mono" style="color:var(--profit)">${fmtMXN(totalAbonado)}</div></div>
+      <div class="stat-box"><div class="lbl">Total${grupoActivo ? ' de este grupo' : ' comprado'}</div><div class="val mono">${fmtMXN(totalMostrado)}</div></div>
+      <div class="stat-box"><div class="lbl">Abonado${grupoActivo ? ' a este grupo' : ''}</div><div class="val mono" style="color:var(--profit)">${fmtMXN(abonadoMostrado)}</div></div>
     </div>
     <div class="stat-row">
-      <div class="stat-box" style="${saldo>0?'background:var(--danger-bg);':''}"><div class="lbl">Saldo pendiente</div><div class="val mono" style="${saldo>0?'color:var(--danger)':''}">${fmtMXN(saldo)}</div></div>
+      <div class="stat-box" style="${saldoMostrado>0?'background:var(--danger-bg);':''}"><div class="lbl">Saldo pendiente${grupoActivo ? ' (este grupo)' : ''}</div><div class="val mono" style="${saldoMostrado>0?'color:var(--danger)':''}">${fmtMXN(saldoMostrado)}</div></div>
       <div class="stat-box"><div class="lbl">Productos</div><div class="val">${ventas.length}</div></div>
     </div>
 
@@ -2256,7 +2270,7 @@ function verDetalleCliente(id, mantenerPantalla){
             <div class="order-thumb" style="display:flex;align-items:center;justify-content:center;font-size:16px; background:var(--profit-bg);">💵</div>
             <div>
               <div class="oi-name">${esc(a.nota) || 'Abono'}</div>
-              <div class="oi-meta">${a.grupoId && getGrupo(a.grupoId) ? esc(getGrupo(a.grupoId).nombre) + ' · ' : ''}${new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
+              <div class="oi-meta">${a.grupoId && getGrupo(a.grupoId) ? esc(getGrupo(a.grupoId).nombre) : 'Sin grupo'} · ${new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
             </div>
             <div class="oi-price" style="color:var(--profit)">+${fmtMXN(a.monto)}</div>
           </div>
@@ -2265,21 +2279,6 @@ function verDetalleCliente(id, mantenerPantalla){
     </div>
 
     <div class="section-title">Lo que le has vendido</div>
-    ${gruposDelCliente.length > 0 ? `
-      <div class="chip-row">
-        <div class="chip ${clienteDetalleGrupoFiltro===''?'active':''}" onclick="seleccionarGrupoDetalleCliente('')">Todos (${fmtMXN(total)})</div>
-        ${gruposDelCliente.map(g => `<div class="chip ${g.id===clienteDetalleGrupoFiltro?'active':''}" onclick="seleccionarGrupoDetalleCliente('${g.id}')">${esc(g.nombre)}</div>`).join('')}
-      </div>
-      ${clienteDetalleGrupoFiltro ? `
-        <div class="stat-row">
-          <div class="stat-box"><div class="lbl">Debe (este grupo)</div><div class="val mono">${fmtMXN(totalFiltrado)}</div></div>
-          <div class="stat-box"><div class="lbl">Abonado (este grupo)</div><div class="val mono" style="color:var(--profit)">${fmtMXN(abonadoFiltrado)}</div></div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-box" style="${saldoFiltrado>0?'background:var(--danger-bg);':''}"><div class="lbl">Saldo pendiente (este grupo)</div><div class="val mono" style="${saldoFiltrado>0?'color:var(--danger)':''}">${fmtMXN(saldoFiltrado)}</div></div>
-        </div>
-      ` : ''}
-    ` : ''}
     <button class="btn secondary" style="margin-bottom:14px;" onclick="exportarReporteClientePDF()">📄 Exportar / compartir estado de cuenta (PDF)</button>
     <div class="card" style="padding:6px 16px;">
       ${ventas.length === 0 ? '<p style="color:var(--ink-soft); font-size:13px; padding:12px 0;">Sin compras registradas en esta vista.</p>' :
@@ -2704,9 +2703,10 @@ function openAbonoModal(clienteId){
     .map(gid => getGrupo(gid)).filter(Boolean)
     .sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
   const selGrupo = document.getElementById('aGrupo');
-  selGrupo.innerHTML = '<option value="">— General (todos los grupos) —</option>' +
+  selGrupo.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
     gruposCliente.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
-  selGrupo.value = '';
+  // Si ya estabas viendo un grupo específico, se preselecciona
+  selGrupo.value = clienteDetalleGrupoFiltro || '';
   document.getElementById('modalAbono').classList.add('show');
   pushNavState('modalAbono');
   setTimeout(()=> document.getElementById('aMonto').focus(), 100);
@@ -2715,20 +2715,22 @@ function closeAbonoModal(){ document.getElementById('modalAbono').classList.remo
 async function guardarAbono(){
   if (soloAdmin()) return;
   const monto = parseFloat(document.getElementById('aMonto').value) || 0;
+  const grupoId = document.getElementById('aGrupo').value;
   if (monto <= 0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+  if (!grupoId){ showToast('⚠️ Selecciona a qué grupo se abona'); return; }
   try{
     setSync('busy');
     await db.collection('abonos').add({
       clienteId: clienteDetalleId,
       monto,
-      grupoId: document.getElementById('aGrupo').value || null,
+      grupoId,
       nota: document.getElementById('aNota').value.trim(),
       fecha: new Date().toISOString(),
     });
     setSync('ok');
     closeAbonoModal();
     showToast(`✅ Abono de ${fmtMXN(monto)} registrado`);
-    verDetalleCliente(clienteDetalleId);
+    verDetalleCliente(clienteDetalleId, true);
   }catch(e){
     setSync('err');
     showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
