@@ -985,6 +985,14 @@
       <input type="number" id="eaMonto" step="0.01" inputmode="decimal">
     </div>
     <div class="field">
+      <label>¿A qué grupo se abona?</label>
+      <select id="eaGrupo"><option value="">— Selecciona un grupo —</option></select>
+    </div>
+    <div class="field">
+      <label>Fecha del abono</label>
+      <input type="date" id="eaFecha">
+    </div>
+    <div class="field">
       <label>Nota (opcional)</label>
       <input type="text" id="eaNota" placeholder="Ej. Pago por transferencia">
     </div>
@@ -2746,6 +2754,16 @@ function abrirEditarAbono(id){
   abonoEditandoId = id;
   document.getElementById('eaMonto').value = a.monto;
   document.getElementById('eaNota').value = a.nota || '';
+  document.getElementById('eaFecha').value = new Date(a.fecha).toISOString().slice(0,10);
+
+  const gruposCliente = [...new Set(state.ventas.filter(v=>v.clienteId===a.clienteId).map(v=>v.grupoId).filter(Boolean))]
+    .map(gid => getGrupo(gid)).filter(Boolean)
+    .sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  const selGrupo = document.getElementById('eaGrupo');
+  selGrupo.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
+    gruposCliente.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
+  selGrupo.value = a.grupoId || '';
+
   document.getElementById('modalEditarAbono').classList.add('show');
   pushNavState('modalEditarAbono');
 }
@@ -2757,21 +2775,41 @@ async function guardarEdicionAbono(){
   const a = state.abonos.find(x=>x.id===abonoEditandoId);
   if (!a) return;
   const nuevoMonto = parseFloat(document.getElementById('eaMonto').value) || 0;
+  const nuevoGrupoId = document.getElementById('eaGrupo').value;
+  const nuevaFechaStr = document.getElementById('eaFecha').value;
   const nuevaNota = document.getElementById('eaNota').value.trim();
   if (nuevoMonto <= 0){ showToast('⚠️ Ingresa una cantidad válida'); return; }
+  if (!nuevoGrupoId){ showToast('⚠️ Selecciona a qué grupo se abona'); return; }
+  if (!nuevaFechaStr){ showToast('⚠️ Falta la fecha del abono'); return; }
 
+  const fechaOriginalStr = new Date(a.fecha).toISOString().slice(0,10);
   const cambiaMonto = Math.abs(nuevoMonto - a.monto) > 0.005;
+  const cambiaGrupo = nuevoGrupoId !== (a.grupoId || '');
+  const cambiaFecha = nuevaFechaStr !== fechaOriginalStr;
   const cambiaNota = nuevaNota !== (a.nota || '');
-  if (!cambiaMonto && !cambiaNota){ closeEditarAbonoModal(); return; }
+  if (!cambiaMonto && !cambiaGrupo && !cambiaFecha && !cambiaNota){ closeEditarAbonoModal(); return; }
 
+  const grupoNuevo = getGrupo(nuevoGrupoId);
+  const grupoViejo = a.grupoId ? getGrupo(a.grupoId) : null;
   let mensaje = '¿Confirmas guardar estos cambios en el abono?\n';
   if (cambiaMonto) mensaje += `\n• Monto: ${fmtMXN(a.monto)} → ${fmtMXN(nuevoMonto)}`;
+  if (cambiaGrupo) mensaje += `\n• Grupo: ${grupoViejo ? grupoViejo.nombre : 'Sin grupo'} → ${grupoNuevo ? grupoNuevo.nombre : 'Sin grupo'}`;
+  if (cambiaFecha) mensaje += `\n• Fecha: ${fechaOriginalStr} → ${nuevaFechaStr}`;
   if (cambiaNota) mensaje += `\n• Nota actualizada`;
   if (!confirm(mensaje)) return;
 
+  const datos = { monto: nuevoMonto, grupoId: nuevoGrupoId, nota: nuevaNota };
+  if (cambiaFecha){
+    // Conserva la hora original, solo cambia el día
+    const horaOriginal = new Date(a.fecha);
+    const [y,m,d] = nuevaFechaStr.split('-').map(Number);
+    horaOriginal.setFullYear(y, m-1, d);
+    datos.fecha = horaOriginal.toISOString();
+  }
+
   try{
     setSync('busy');
-    await db.collection('abonos').doc(abonoEditandoId).update({ monto: nuevoMonto, nota: nuevaNota });
+    await db.collection('abonos').doc(abonoEditandoId).update(datos);
     setSync('ok');
     showToast('✅ Abono actualizado');
     closeEditarAbonoModal();
