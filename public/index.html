@@ -579,11 +579,11 @@
 
     <div id="gastosContenido" style="display:none;">
       <div class="stat-row">
-        <div class="stat-box"><div class="lbl">Ganancia de ventas (bruta)</div><div class="val mono" style="color:var(--profit)" id="gGananciaBruta">$0.00</div></div>
+        <div class="stat-box"><div class="lbl">Total de ventas del grupo</div><div class="val mono" id="gTotalVentas">$0.00</div></div>
         <div class="stat-box"><div class="lbl">Gastos totales</div><div class="val mono" style="color:var(--danger)" id="gTotalGastos">$0.00</div></div>
       </div>
       <div class="stat-row">
-        <div class="stat-box" style="grid-column:1 / -1;"><div class="lbl">Ganancia neta (después de gastos)</div><div class="val mono" id="gGananciaNeta">$0.00</div></div>
+        <div class="stat-box" style="grid-column:1 / -1;"><div class="lbl">Ganancia real (ventas − gastos)</div><div class="val mono" id="gGananciaNeta">$0.00</div></div>
       </div>
 
       <div class="card" id="cardAgregarGasto">
@@ -930,7 +930,7 @@
         <input type="number" id="nvcImpuesto" step="0.1" inputmode="decimal">
       </div>
       <div class="field money">
-        <label>Precio de venta total (MXN)</label>
+        <label>Precio por unidad (MXN)</label>
         <input type="number" id="nvcPrecio" placeholder="0.00" step="0.01" inputmode="decimal">
       </div>
     </div>
@@ -940,6 +940,10 @@
       <textarea id="nvcComentarios" rows="2" placeholder="Opcional"></textarea>
     </div>
 
+    <div class="tag-row">
+      <span class="tag-label">Precio total</span>
+      <span class="tag-value mono" id="nvcPrecioTotalPreview">$0.00</span>
+    </div>
     <div class="tag-row" style="margin:6px 0 14px;">
       <span class="tag-label">Ganancia</span>
       <span class="tag-value mono" id="nvcGananciaPreview">$0.00</span>
@@ -2640,11 +2644,13 @@ function actualizarGananciaNVC(){
   const costoUSD = parseFloat(document.getElementById('nvcCostoUSD').value) || 0;
   const tipoCambio = parseFloat(document.getElementById('nvcTipoCambio').value) || 0;
   const impuestoPct = parseFloat(document.getElementById('nvcImpuesto').value) || 0;
-  const precio = parseFloat(document.getElementById('nvcPrecio').value) || 0;
+  const precioUnit = parseFloat(document.getElementById('nvcPrecio').value) || 0;
   const cantidad = Math.max(1, parseInt(document.getElementById('nvcCantidad').value) || 1);
   const costoUnitMXN = costoUSD * tipoCambio;
   const costoTotal = (costoUnitMXN + costoUnitMXN * (impuestoPct/100)) * cantidad;
-  const ganancia = precio - costoTotal;
+  const precioTotal = precioUnit * cantidad;
+  const ganancia = precioTotal - costoTotal;
+  document.getElementById('nvcPrecioTotalPreview').textContent = fmtMXN(precioTotal);
   const el = document.getElementById('nvcGananciaPreview');
   el.textContent = fmtMXN(ganancia);
   el.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
@@ -2661,18 +2667,19 @@ async function guardarNuevaVentaCliente(){
   const costoUSD = parseFloat(document.getElementById('nvcCostoUSD').value) || 0;
   const tipoCambio = parseFloat(document.getElementById('nvcTipoCambio').value) || 0;
   const impuestoPct = parseFloat(document.getElementById('nvcImpuesto').value) || 0;
-  const precioMXN = parseFloat(document.getElementById('nvcPrecio').value) || 0;
+  const precioUnit = parseFloat(document.getElementById('nvcPrecio').value) || 0;
   const comentarios = document.getElementById('nvcComentarios').value.trim();
 
   if (!nombre){ showToast('⚠️ Falta el nombre del producto'); return; }
   if (!grupoId){ showToast('⚠️ Selecciona un grupo de ventas'); return; }
-  if (!precioMXN){ showToast('⚠️ Falta el precio de venta'); return; }
+  if (!precioUnit){ showToast('⚠️ Falta el precio de venta'); return; }
 
   const costoUnitMXN = costoUSD * tipoCambio;
   const impuestoUnitMonto = costoUnitMXN * (impuestoPct / 100);
   const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
   const impuestoMonto = impuestoUnitMonto * cantidad;
-  const ganancia = precioMXN - costoTotal;
+  const precioTotal = precioUnit * cantidad;
+  const ganancia = precioTotal - costoTotal;
 
   const btn = document.getElementById('btnGuardarNVC');
   btn.disabled = true; btn.textContent = 'Guardando...';
@@ -2683,8 +2690,8 @@ async function guardarNuevaVentaCliente(){
       nombre, categoria: 'Otro', foto: fotosNVC[0] || null, fotos: fotosNVC,
       cantidad, comentarios,
       costoUSD, tipoCambio, impuestoPct, impuestoMonto,
-      precioUnitarioMXN: precioMXN / cantidad,
-      costoMXN: costoTotal, precioMXN, ganancia,
+      precioUnitarioMXN: precioUnit,
+      costoMXN: costoTotal, precioMXN: precioTotal, ganancia,
       clienteId: clienteDetalleId, grupoId,
       fecha: new Date().toISOString(),
     });
@@ -2975,26 +2982,46 @@ function renderReportes(){
   const totalVentas = ventas.reduce((s,v)=>s+v.precioMXN,0);
   const totalGanancia = ventas.reduce((s,v)=>s+v.ganancia,0);
 
-  // Saldo pendiente: si hay un cliente elegido, es el saldo de ese cliente
-  // (todas sus compras menos todos sus abonos); si no, es el total pendiente
-  // de cobro de todos los clientes.
+  // Saldo pendiente: se calcula con los mismos filtros activos (cliente,
+  // grupo, ubicación y fechas) que se usaron para las ventas de arriba.
   const clienteFiltroId = document.getElementById('rCliente').value;
-  let saldoPendiente;
-  if (clienteFiltroId){
-    const totalCliente = state.ventas.filter(v=>v.clienteId===clienteFiltroId).reduce((s,v)=>s+v.precioMXN,0);
-    const abonadoCliente = state.abonos.filter(a=>a.clienteId===clienteFiltroId).reduce((s,a)=>s+a.monto,0);
-    saldoPendiente = totalCliente - abonadoCliente;
-  } else {
-    const totalTodos = state.ventas.reduce((s,v)=>s+v.precioMXN,0);
-    const abonadoTodos = state.abonos.reduce((s,a)=>s+a.monto,0);
-    saldoPendiente = totalTodos - abonadoTodos;
+  const grupoFiltroId = document.getElementById('rGrupo').value;
+  const ubicacionFiltro = document.getElementById('rUbicacion').value;
+  const desdeFiltro = document.getElementById('rDesde').value;
+  const hastaFiltro = document.getElementById('rHasta').value;
+  const hayFiltroActivo = clienteFiltroId || grupoFiltroId || ubicacionFiltro || desdeFiltro || hastaFiltro;
+
+  const abonosFiltrados = state.abonos.filter(a=>{
+    if (clienteFiltroId && a.clienteId !== clienteFiltroId) return false;
+    if (grupoFiltroId && a.grupoId !== grupoFiltroId) return false;
+    if (ubicacionFiltro){
+      const c = state.clientes.find(x=>x.id===a.clienteId);
+      if (!c || c.ubicacion !== ubicacionFiltro) return false;
+    }
+    const f = new Date(a.fecha);
+    if (desdeFiltro && f < new Date(desdeFiltro + 'T00:00:00')) return false;
+    if (hastaFiltro && f > new Date(hastaFiltro + 'T23:59:59')) return false;
+    return true;
+  });
+  const abonadoFiltro = abonosFiltrados.reduce((s,a)=>s+a.monto,0);
+  const saldoPendiente = totalVentas - abonadoFiltro;
+
+  let etiquetaSaldo = 'Saldo pendiente (todos los clientes)';
+  if (grupoFiltroId){
+    const g = getGrupo(grupoFiltroId);
+    etiquetaSaldo = `Saldo pendiente del grupo "${g ? g.nombre : ''}"`;
+  } else if (clienteFiltroId){
+    etiquetaSaldo = 'Saldo pendiente de este cliente';
+  } else if (hayFiltroActivo){
+    etiquetaSaldo = 'Saldo pendiente (con estos filtros)';
   }
 
   document.getElementById('statsReportes').innerHTML = `
     <div class="stat-box"><div class="lbl">${ventas.length} registro(s)</div><div class="val mono">${fmtMXN(totalVentas)}</div></div>
     <div class="stat-box"><div class="lbl">Ganancia</div><div class="val mono" style="color:var(--profit)">${fmtMXN(totalGanancia)}</div></div>
+    ${grupoFiltroId ? `<div class="stat-box"><div class="lbl">Abonado a este grupo</div><div class="val mono" style="color:var(--profit)">${fmtMXN(abonadoFiltro)}</div></div>` : ''}
     <div class="stat-box" style="grid-column:1 / -1; ${saldoPendiente>0?'background:var(--danger-bg);':''}">
-      <div class="lbl">${clienteFiltroId ? 'Saldo pendiente de este cliente' : 'Saldo pendiente (todos los clientes)'}</div>
+      <div class="lbl">${etiquetaSaldo}</div>
       <div class="val mono" style="${saldoPendiente>0?'color:var(--danger)':''}">${fmtMXN(saldoPendiente)}</div>
     </div>
   `;
@@ -3056,16 +3083,16 @@ function renderGastosTab(){
   if (!grupoGastosActivo){ contenido.style.display = 'none'; return; }
   contenido.style.display = 'block';
 
-  const gananciaBruta = state.ventas.filter(v=>v.grupoId===grupoGastosActivo).reduce((s,v)=>s+v.ganancia,0);
+  const totalVentasGrupo = state.ventas.filter(v=>v.grupoId===grupoGastosActivo).reduce((s,v)=>s+v.precioMXN,0);
   const gastosGrupo = state.gastos.filter(g=>g.grupoId===grupoGastosActivo).sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
   const totalGastos = gastosGrupo.reduce((s,g)=>s+g.monto,0);
-  const gananciaNeta = gananciaBruta - totalGastos;
+  const gananciaReal = totalVentasGrupo - totalGastos;
 
-  document.getElementById('gGananciaBruta').textContent = fmtMXN(gananciaBruta);
+  document.getElementById('gTotalVentas').textContent = fmtMXN(totalVentasGrupo);
   document.getElementById('gTotalGastos').textContent = fmtMXN(totalGastos);
   const netaEl = document.getElementById('gGananciaNeta');
-  netaEl.textContent = fmtMXN(gananciaNeta);
-  netaEl.style.color = gananciaNeta < 0 ? 'var(--danger)' : 'var(--profit)';
+  netaEl.textContent = fmtMXN(gananciaReal);
+  netaEl.style.color = gananciaReal < 0 ? 'var(--danger)' : 'var(--profit)';
 
   const lista = document.getElementById('listaGastos');
   if (gastosGrupo.length === 0){
