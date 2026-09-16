@@ -786,7 +786,7 @@
     </div>
     <div class="field">
       <label>Contraseña</label>
-      <input type="text" id="uPasswordNuevo" placeholder="Mínimo 6 caracteres" autocomplete="off">
+      <input type="text" id="uPasswordNuevo" placeholder="Mínimo 8 caracteres, con letras y números" autocomplete="off">
     </div>
     <div class="field">
       <label>Rol</label>
@@ -1440,7 +1440,11 @@ async function crearUsuarioNuevo(){
   const password = document.getElementById('uPasswordNuevo').value;
   const rolDeseado = document.getElementById('uRolNuevo').value;
   if (!usuario){ showToast('⚠️ Ponle un nombre de usuario'); return; }
-  if (!password || password.length < 6){ showToast('⚠️ La contraseña debe tener al menos 6 caracteres'); return; }
+  if (!password || password.length < 8){ showToast('⚠️ La contraseña debe tener al menos 8 caracteres'); return; }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)){
+    showToast('⚠️ La contraseña debe combinar letras y números');
+    return;
+  }
 
   const btn = document.getElementById('btnCrearUsuario');
   btn.disabled = true; btn.textContent = 'Creando...';
@@ -2085,7 +2089,7 @@ function renderClientes(){
     const iniciales = c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase();
     return `
       <div class="client-card" style="border-left:4px solid ${col.hex};" onclick="verDetalleCliente('${c.id}')">
-        <div class="client-avatar" style="background:${col.bg}; color:${col.hex};">${iniciales}</div>
+        <div class="client-avatar" style="background:${col.bg}; color:${col.hex};">${esc(iniciales)}</div>
         <div class="client-info">
           <div class="client-name">${esc(c.nombre)}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400;">(${esc(c.alias)})</span>` : ''}</div>
           ${c.ubicacion ? `<span class="platform-badge" style="background:rgba(59,130,246,0.18); color:#93C5FD; border:1px solid rgba(59,130,246,0.35);">📍 ${esc(c.ubicacion)}</span>` : ''}
@@ -2111,17 +2115,19 @@ async function exportarReporteClientePDF(){
   if (!c) return;
 
   const todasLasVentas = state.ventas.filter(v=>v.clienteId===c.id).sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
-  const abonos = state.abonos.filter(a=>a.clienteId===c.id).sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
+  const todosLosAbonos = state.abonos.filter(a=>a.clienteId===c.id).sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
   const grupoActivo = clienteDetalleGrupoFiltro ? getGrupo(clienteDetalleGrupoFiltro) : null;
   const ventasReporte = grupoActivo ? todasLasVentas.filter(v=>v.grupoId===grupoActivo.id) : todasLasVentas;
+  // Los abonos del reporte respetan la misma selección que se ve en pantalla:
+  // si hay un grupo elegido, solo se muestran los abonos ligados a ESE grupo.
+  const abonosReporte = grupoActivo ? todosLosAbonos.filter(a=>a.grupoId===grupoActivo.id) : todosLosAbonos;
 
   const totalFiltro = ventasReporte.reduce((s,v)=>s+v.precioMXN,0);
-  const totalGeneral = todasLasVentas.reduce((s,v)=>s+v.precioMXN,0);
-  const totalAbonado = abonos.reduce((s,a)=>s+a.monto,0);
-  const saldoGeneral = totalGeneral - totalAbonado;
+  const abonadoFiltro = abonosReporte.reduce((s,a)=>s+a.monto,0);
+  const saldoFiltro = totalFiltro - abonadoFiltro;
 
-  if (ventasReporte.length === 0 && abonos.length === 0){
-    showToast('⚠️ Este cliente no tiene compras ni abonos que reportar');
+  if (ventasReporte.length === 0 && abonosReporte.length === 0){
+    showToast('⚠️ Este cliente no tiene compras ni abonos que reportar en esta vista');
     return;
   }
 
@@ -2136,6 +2142,7 @@ async function exportarReporteClientePDF(){
   let y = 34;
   if (c.telefono){ doc.text(`Teléfono: ${c.telefono}`, 14, y); y += 6; }
   if (c.ubicacion){ doc.text(`Ubicación: ${c.ubicacion}`, 14, y); y += 6; }
+  doc.text(`Vista: ${grupoActivo ? grupoActivo.nombre : 'Todos los grupos (cuenta general)'}`, 14, y); y += 6;
   doc.text(`Fecha del reporte: ${hoy}`, 14, y); y += 10;
 
   doc.setFontSize(13);
@@ -2163,13 +2170,13 @@ async function exportarReporteClientePDF(){
   y2 += 12;
 
   doc.setFontSize(13);
-  doc.text('Abonos registrados', 14, y2);
-  const filasAbonos = abonos.map(a => [
+  doc.text(grupoActivo ? `Abonos a este grupo` : 'Abonos registrados', 14, y2);
+  const filasAbonos = abonosReporte.map(a => [
     new Date(a.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'}),
     a.nota || 'Abono',
     fmtMXN(a.monto),
   ]);
-  if (filasAbonos.length === 0) filasAbonos.push(['—', 'Sin abonos registrados', '—']);
+  if (filasAbonos.length === 0) filasAbonos.push(['—', 'Sin abonos registrados en esta vista', '—']);
 
   doc.autoTable({
     startY: y2 + 4,
@@ -2182,11 +2189,11 @@ async function exportarReporteClientePDF(){
 
   let y3 = doc.lastAutoTable.finalY + 10;
   doc.setFontSize(12);
-  doc.text(`Total comprado (general): ${fmtMXN(totalGeneral)}`, 14, y3); y3 += 7;
-  doc.text(`Total abonado (general): ${fmtMXN(totalAbonado)}`, 14, y3); y3 += 9;
+  doc.text(`Total ${grupoActivo ? 'de este grupo' : 'comprado'}: ${fmtMXN(totalFiltro)}`, 14, y3); y3 += 7;
+  doc.text(`Total abonado${grupoActivo ? ' a este grupo' : ''}: ${fmtMXN(abonadoFiltro)}`, 14, y3); y3 += 9;
   doc.setFontSize(14);
   doc.setTextColor(180, 40, 40);
-  doc.text(`Saldo pendiente: ${fmtMXN(saldoGeneral)}`, 14, y3);
+  doc.text(`Saldo pendiente${grupoActivo ? ' (este grupo)' : ''}: ${fmtMXN(saldoFiltro)}`, 14, y3);
   doc.setTextColor(0, 0, 0);
 
   const nombreArchivo = `estado-cuenta-${c.nombre.trim().replace(/\s+/g,'-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.pdf`;
@@ -2238,7 +2245,7 @@ function verDetalleCliente(id, mantenerPantalla){
     <button class="btn secondary small" style="margin-bottom:14px;" onclick="goTo('screenClientes')">← Volver a clientes</button>
     <div class="card">
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-        <div class="client-avatar" style="width:52px;height:52px;font-size:17px; background:${col.bg}; color:${col.hex};">${c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase()}</div>
+        <div class="client-avatar" style="width:52px;height:52px;font-size:17px; background:${col.bg}; color:${col.hex};">${esc(c.nombre.split(' ').filter((_,i)=>i<2).map(w=>w[0]).join('').toUpperCase())}</div>
         <div style="flex:1;">
           <h3 style="margin:0; font-size:17px;">${esc(c.nombre)}${c.alias ? ` <span style="color:var(--ink-soft); font-weight:400; font-size:14px;">(${esc(c.alias)})</span>` : ''}</h3>
         </div>
@@ -3009,7 +3016,7 @@ function renderReportes(){
   let etiquetaSaldo = 'Saldo pendiente (todos los clientes)';
   if (grupoFiltroId){
     const g = getGrupo(grupoFiltroId);
-    etiquetaSaldo = `Saldo pendiente del grupo "${g ? g.nombre : ''}"`;
+    etiquetaSaldo = `Saldo pendiente del grupo "${esc(g ? g.nombre : '')}"`;
   } else if (clienteFiltroId){
     etiquetaSaldo = 'Saldo pendiente de este cliente';
   } else if (hayFiltroActivo){
