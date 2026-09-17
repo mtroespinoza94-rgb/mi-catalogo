@@ -298,7 +298,7 @@
   .filtros-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
   /* ---- Escritura en mayúsculas ---- */
-  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota, #buscarCliente, #vComentarios, #fComentarios, #nvcNombre, #nvcComentarios{
+  #fNombre, #fCategoriaOtra, #mNombre, #mAlias, #mNotas, #gNombre, #lgNombre, #aNota, #buscarCliente, #vComentarios, #fComentarios, #nvcNombre, #nvcComentarios, #pedNombre, #pedComentarios{
     text-transform:uppercase;
   }
   #fNombre::placeholder, #mNombre::placeholder, #mAlias::placeholder, #gNombre::placeholder, #lgNombre::placeholder, #buscarCliente::placeholder{
@@ -466,26 +466,59 @@
 
 <!-- ============ CLIENTES ============ -->
 <div class="screen" id="screenClientes">
-  <div class="stat-row" id="statsClientes"></div>
-  <div class="search-box">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-    <input type="text" id="buscarCliente" placeholder="Buscar cliente..." oninput="renderClientes()">
+  <div class="chip-row">
+    <div class="chip active" id="tabBtnClientesLista" onclick="cambiarTabClientes('lista')">Clientes</div>
+    <div class="chip" id="tabBtnPedidos" onclick="cambiarTabClientes('pedidos')">Pedidos</div>
   </div>
-  <div class="two-col" style="margin-bottom:10px;">
-    <div class="field" style="margin-bottom:0;">
-      <label>Grupo de ventas</label>
-      <select id="clientesFiltroGrupoSelect" onchange="seleccionarClientesFiltroGrupo(this.value)">
-        <option value="">Todos los grupos</option>
-      </select>
+
+  <div id="tabClientesLista">
+    <div class="stat-row" id="statsClientes"></div>
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="buscarCliente" placeholder="Buscar cliente..." oninput="renderClientes()">
     </div>
-    <div class="field" style="margin-bottom:0;">
-      <label>Ubicación</label>
-      <select id="clientesFiltroUbicacionSelect" onchange="seleccionarClientesFiltroUbicacion(this.value)">
-        <option value="">Todas</option>
-      </select>
+    <div class="chip-row">
+      <div class="chip active" id="chipSaldoTodos" onclick="seleccionarClientesFiltroSaldo('')">Todos</div>
+      <div class="chip" id="chipSaldoConDeuda" onclick="seleccionarClientesFiltroSaldo('con-deuda')">Con deuda</div>
+      <div class="chip" id="chipSaldoAlCorriente" onclick="seleccionarClientesFiltroSaldo('al-corriente')">Al corriente</div>
     </div>
+    <div class="two-col" style="margin-bottom:10px;">
+      <div class="field" style="margin-bottom:0;">
+        <label>Grupo de ventas</label>
+        <select id="clientesFiltroGrupoSelect" onchange="seleccionarClientesFiltroGrupo(this.value)">
+          <option value="">Todos los grupos</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Ubicación</label>
+        <select id="clientesFiltroUbicacionSelect" onchange="seleccionarClientesFiltroUbicacion(this.value)">
+          <option value="">Todas</option>
+        </select>
+      </div>
+    </div>
+    <div id="listaClientes"></div>
   </div>
-  <div id="listaClientes"></div>
+
+  <div id="tabPedidos" style="display:none;">
+    <button class="btn" id="btnNuevoPedido" style="margin-bottom:14px;" onclick="openNuevoPedidoModal()">+ Agregar pedido</button>
+    <div class="two-col" style="margin-bottom:10px;">
+      <div class="field" style="margin-bottom:0;">
+        <label>Cliente</label>
+        <select id="pedidosFiltroCliente" onchange="renderPedidos()">
+          <option value="">Todos los clientes</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Estado</label>
+        <select id="pedidosFiltroEstado" onchange="renderPedidos()">
+          <option value="pendiente">Pendientes</option>
+          <option value="comprado">Ya comprados</option>
+          <option value="">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div id="listaPedidos"></div>
+  </div>
 </div>
 
 <!-- ============ DETALLE DE CLIENTE ============ -->
@@ -878,6 +911,109 @@
   </div>
 </div>
 
+<!-- ============ MODAL NUEVO PEDIDO ============ -->
+<div class="modal-overlay" id="modalNuevoPedido">
+  <div class="modal-sheet">
+    <h3>Nuevo pedido</h3>
+    <p style="margin:-8px 0 14px; font-size:12.5px; color:var(--ink-soft);">Lo que el cliente quiere comprar, aunque todavía no lo tengas. No cuenta como venta.</p>
+
+    <div class="field">
+      <label>Fotos de referencia (opcional)</label>
+      <div id="pedFotosGrid" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('pedFotoInputCamara').click();">📷 Tomar foto</button>
+        <button type="button" class="btn small secondary" style="flex:1;" onclick="document.getElementById('pedFotoInputGaleria').click();">🖼️ Galería</button>
+      </div>
+      <input type="file" id="pedFotoInputCamara" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="pedFotoInputGaleria" accept="image/*" multiple style="display:none;">
+    </div>
+
+    <div class="field">
+      <label>Cliente</label>
+      <select id="pedCliente"><option value="">— Selecciona un cliente —</option></select>
+    </div>
+    <div class="field">
+      <label>¿Qué quiere comprar?</label>
+      <input type="text" id="pedNombre" placeholder="Ej. Perfume Coco Mademoiselle 100ml">
+    </div>
+    <div class="field">
+      <label>Cantidad</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="cambiarCantidadPedido(-1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">−</button>
+        <input type="number" id="pedCantidad" value="1" min="1" step="1" inputmode="numeric" style="text-align:center; max-width:80px; font-weight:700;">
+        <button type="button" onclick="cambiarCantidadPedido(1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">+</button>
+      </div>
+    </div>
+    <div class="field money">
+      <label>Costo aproximado (MXN)</label>
+      <input type="number" id="pedCostoAprox" placeholder="0.00" step="0.01" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Comentarios (opcional)</label>
+      <textarea id="pedComentarios" rows="2" placeholder="Ej. Lo quiere en color negro"></textarea>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button class="btn secondary" onclick="closeNuevoPedidoModal()">Cancelar</button>
+      <button class="btn" onclick="guardarNuevoPedido()">Guardar pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL CONFIRMAR PEDIDO COMPRADO ============ -->
+<div class="modal-overlay" id="modalConfirmarPedido">
+  <div class="modal-sheet">
+    <h3>Confirmar compra</h3>
+    <p style="margin:-8px 0 14px; font-size:12.5px; color:var(--ink-soft);">
+      Para <strong id="cpClienteNombre"></strong> — <span id="cpProductoNombre"></span>
+    </p>
+
+    <div class="field">
+      <label>Grupo de ventas</label>
+      <select id="cpGrupo"><option value="">— Selecciona un grupo —</option></select>
+    </div>
+    <div class="field">
+      <label>Cantidad</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="cambiarCantidadConfirmarPedido(-1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">−</button>
+        <input type="number" id="cpCantidad" value="1" min="1" step="1" inputmode="numeric" style="text-align:center; max-width:80px; font-weight:700;">
+        <button type="button" onclick="cambiarCantidadConfirmarPedido(1)" class="btn secondary small" style="width:44px; padding:0; font-size:20px; line-height:1;">+</button>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="field money">
+        <label>Costo por unidad (USD)</label>
+        <input type="number" id="cpCostoUSD" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+      <div class="field money">
+        <label>Tipo de cambio</label>
+        <input type="number" id="cpTipoCambio" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="field money">
+        <label>Impuesto (%)</label>
+        <input type="number" id="cpImpuesto" step="0.1" inputmode="decimal">
+      </div>
+      <div class="field money">
+        <label>Precio por unidad (MXN)</label>
+        <input type="number" id="cpPrecio" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:-10px 0 14px;">El costo aproximado que registraste fue <strong id="cpCostoAproxRef"></strong> — confirma si sigue igual o corrígelo.</p>
+
+    <div class="tag-row" style="margin-bottom:14px;">
+      <span class="tag-label">Ganancia</span>
+      <span class="tag-value mono" id="cpGananciaPreview">$0.00</span>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button class="btn secondary" onclick="closeConfirmarPedidoModal()">Cancelar</button>
+      <button class="btn" id="btnConfirmarPedido" onclick="confirmarPedidoComprado()">✅ Confirmar compra</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL NUEVA VENTA DESDE PERFIL DE CLIENTE ============ -->
 <div class="modal-overlay" id="modalNuevaVentaCliente">
   <div class="modal-sheet">
@@ -1125,7 +1261,7 @@ function loadPrefs(){
 function savePrefs(){ localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }
 
 let prefs = loadPrefs();
-let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [], usuarios: [], gastos: [] };
+let state = { clientes: [], grupos: [], ventas: [], abonos: [], lugares: [], usuarios: [], gastos: [], pedidos: [] };
 let fotosBase64 = [];
 let categoriaSeleccionada = CATEGORIAS[0];
 let plataformaSeleccionada = 'instagram';
@@ -1263,7 +1399,7 @@ function aplicarPermisosUI(){
   const esAdmin = rolActual === 'admin';
   const navNueva = document.querySelector('.nav-btn[data-screen="screenNueva"]');
   if (navNueva) navNueva.style.display = esAdmin ? '' : 'none';
-  ['btnNuevoCliente','btnNuevoGrupo','btnNuevoLugar','cardAgregarGasto'].forEach(id=>{
+  ['btnNuevoCliente','btnNuevoGrupo','btnNuevoLugar','cardAgregarGasto','btnNuevoPedido'].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.display = esAdmin ? '' : 'none';
   });
@@ -1716,7 +1852,7 @@ function forzarMayusculas(id){
     if (start !== null && end !== null) el.setSelectionRange(start, end);
   });
 }
-['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','eaNota','buscarCliente','vComentarios','fComentarios','nvcNombre','nvcComentarios'].forEach(forzarMayusculas);
+['fNombre','fCategoriaOtra','mNombre','mAlias','mNotas','gNombre','lgNombre','aNota','eaNota','buscarCliente','vComentarios','fComentarios','nvcNombre','nvcComentarios','pedNombre','pedComentarios'].forEach(forzarMayusculas);
 
 /* ============ PLATAFORMAS (chips en modal cliente) ============ */
 function renderPlataformaChips(){
@@ -2027,8 +2163,16 @@ function limpiarFormulario(){
 /* ============ VISTA: CLIENTES (segmentado) ============ */
 let clientesFiltroGrupo = '';
 let clientesFiltroUbicacion = '';
+let clientesFiltroSaldo = '';
 function seleccionarClientesFiltroGrupo(id){ clientesFiltroGrupo = id; renderClientes(); }
 function seleccionarClientesFiltroUbicacion(u){ clientesFiltroUbicacion = u; renderClientes(); }
+function seleccionarClientesFiltroSaldo(valor){
+  clientesFiltroSaldo = valor;
+  document.getElementById('chipSaldoTodos').classList.toggle('active', valor === '');
+  document.getElementById('chipSaldoConDeuda').classList.toggle('active', valor === 'con-deuda');
+  document.getElementById('chipSaldoAlCorriente').classList.toggle('active', valor === 'al-corriente');
+  renderClientes();
+}
 
 function renderFiltrosClientes(){
   const selGrupo = document.getElementById('clientesFiltroGrupoSelect');
@@ -2069,6 +2213,19 @@ function renderClientes(){
     clientes = clientes.filter(c => idsConGrupo.has(c.id));
   }
 
+  clientes = clientes.map(c=>{
+    const ventasCliente = state.ventas.filter(v=>v.clienteId===c.id);
+    const total = ventasCliente.reduce((s,v)=>s+v.precioMXN,0);
+    const abonado = state.abonos.filter(a=>a.clienteId===c.id).reduce((s,a)=>s+a.monto,0);
+    return {...c, total, numVentas: ventasCliente.length, saldo: total - abonado};
+  });
+
+  if (clientesFiltroSaldo === 'con-deuda'){
+    clientes = clientes.filter(c => c.saldo > 0);
+  } else if (clientesFiltroSaldo === 'al-corriente'){
+    clientes = clientes.filter(c => c.saldo <= 0);
+  }
+
   if (clientes.length === 0){
     cont.innerHTML = `<div class="empty">
       <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -2077,12 +2234,7 @@ function renderClientes(){
     return;
   }
 
-  clientes = clientes.map(c=>{
-    const ventasCliente = state.ventas.filter(v=>v.clienteId===c.id);
-    const total = ventasCliente.reduce((s,v)=>s+v.precioMXN,0);
-    const abonado = state.abonos.filter(a=>a.clienteId===c.id).reduce((s,a)=>s+a.monto,0);
-    return {...c, total, numVentas: ventasCliente.length, saldo: total - abonado};
-  }).sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  clientes = clientes.sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
 
   cont.innerHTML = clientes.map(c=>{
     const col = getColorCliente(c.color);
@@ -2562,6 +2714,274 @@ async function eliminarVenta(){
   }catch(e){
     setSync('err');
     showToast('⚠️ No se pudo eliminar. Revisa tu conexión.');
+  }
+}
+
+/* ============ PEDIDOS (lo que el cliente quiere, aún no es venta) ============ */
+function cambiarTabClientes(tab){
+  document.getElementById('tabBtnClientesLista').classList.toggle('active', tab === 'lista');
+  document.getElementById('tabBtnPedidos').classList.toggle('active', tab === 'pedidos');
+  document.getElementById('tabClientesLista').style.display = tab === 'lista' ? 'block' : 'none';
+  document.getElementById('tabPedidos').style.display = tab === 'pedidos' ? 'block' : 'none';
+  if (tab === 'pedidos') renderPedidos();
+}
+
+function renderPedidos(){
+  const selCliente = document.getElementById('pedidosFiltroCliente');
+  if (!selCliente) return;
+  const actual = selCliente.value;
+  const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  selCliente.innerHTML = '<option value="">Todos los clientes</option>' +
+    clientesOrdenados.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  selCliente.value = actual;
+
+  const clienteFiltro = selCliente.value;
+  const estadoFiltro = document.getElementById('pedidosFiltroEstado').value;
+
+  let pedidos = [...state.pedidos];
+  if (clienteFiltro) pedidos = pedidos.filter(p => p.clienteId === clienteFiltro);
+  if (estadoFiltro) pedidos = pedidos.filter(p => (p.estado || 'pendiente') === estadoFiltro);
+  pedidos.sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+
+  const cont = document.getElementById('listaPedidos');
+  if (pedidos.length === 0){
+    cont.innerHTML = `<div class="empty">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#5B6B64" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      <p>Sin pedidos en esta vista.</p>
+    </div>`;
+    return;
+  }
+
+  cont.innerHTML = pedidos.map(p => {
+    const c = state.clientes.find(x=>x.id===p.clienteId);
+    const comprado = (p.estado || 'pendiente') === 'comprado';
+    return `
+      <div class="card" style="padding:14px 16px; margin-bottom:10px;">
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          ${p.foto ? `<img src="${p.foto}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:52px;height:52px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📝</div>`}
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600; font-size:14px;">${esc(p.nombre)}${p.cantidad > 1 ? ` <span style="color:var(--gold);">×${p.cantidad}</span>` : ''}</div>
+            <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">${c ? esc(c.nombre) : 'Cliente eliminado'} · ${new Date(p.fecha).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}</div>
+            ${p.comentarios ? `<div style="font-size:12px; color:var(--ink-soft); font-style:italic; margin-top:2px;">💬 ${esc(p.comentarios)}</div>` : ''}
+            <div style="font-size:13px; margin-top:4px;">Aprox: <strong class="mono">${fmtMXN(p.costoAprox || 0)}</strong></div>
+          </div>
+        </div>
+        ${rolActual === 'admin' ? `
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            ${!comprado ? `<button class="btn small" style="flex:1;" onclick="abrirConfirmarPedidoComprado('${p.id}')">✅ Comprado</button>` : `<div class="platform-badge" style="background:var(--profit-bg); color:var(--profit); border:1px solid rgba(16,185,129,0.35); flex:1; text-align:center; padding:8px;">Ya comprado</div>`}
+            <button class="btn small secondary" onclick="eliminarPedido('${p.id}')">🗑️</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+let fotosPedido = [];
+function openNuevoPedidoModal(){
+  if (soloAdmin()) return;
+  document.getElementById('pedNombre').value = '';
+  document.getElementById('pedCantidad').value = 1;
+  document.getElementById('pedCostoAprox').value = '';
+  document.getElementById('pedComentarios').value = '';
+  fotosPedido = [];
+  renderFotosGridPedido();
+
+  const clientesOrdenados = [...state.clientes].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es'));
+  const sel = document.getElementById('pedCliente');
+  sel.innerHTML = '<option value="">— Selecciona un cliente —</option>' +
+    clientesOrdenados.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  sel.value = '';
+
+  document.getElementById('modalNuevoPedido').classList.add('show');
+  pushNavState('modalNuevoPedido');
+  setTimeout(()=> document.getElementById('pedNombre').focus(), 100);
+}
+function closeNuevoPedidoModal(){ document.getElementById('modalNuevoPedido').classList.remove('show'); }
+function cambiarCantidadPedido(delta){
+  const input = document.getElementById('pedCantidad');
+  input.value = Math.max(1, (parseInt(input.value) || 1) + delta);
+}
+
+function renderFotosGridPedido(){
+  const grid = document.getElementById('pedFotosGrid');
+  grid.innerHTML = fotosPedido.map((f, i) => `
+    <div class="foto-thumb">
+      <img src="${f}">
+      <button type="button" class="foto-quitar" onclick="quitarFotoPedido(${i})">✕</button>
+    </div>
+  `).join('');
+}
+function quitarFotoPedido(index){ fotosPedido.splice(index, 1); renderFotosGridPedido(); }
+function procesarFotoPedido(file){
+  if (!file) return;
+  if (fotosPedido.length >= MAX_FOTOS_VENTA){ showToast(`⚠️ Máximo ${MAX_FOTOS_VENTA} fotos`); return; }
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      const maxW = 500;
+      const scale = Math.min(1, maxW / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      fotosPedido.push(canvas.toDataURL('image/jpeg', 0.65));
+      renderFotosGridPedido();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('pedFotoInputCamara').addEventListener('change', (e)=>{ procesarFotoPedido(e.target.files[0]); e.target.value=''; });
+document.getElementById('pedFotoInputGaleria').addEventListener('change', (e)=>{
+  Array.from(e.target.files).forEach(f => procesarFotoPedido(f));
+  e.target.value = '';
+});
+
+async function guardarNuevoPedido(){
+  if (soloAdmin()) return;
+  const clienteId = document.getElementById('pedCliente').value;
+  const nombre = document.getElementById('pedNombre').value.trim();
+  const cantidad = Math.max(1, parseInt(document.getElementById('pedCantidad').value) || 1);
+  const costoAprox = parseFloat(document.getElementById('pedCostoAprox').value) || 0;
+  const comentarios = document.getElementById('pedComentarios').value.trim();
+
+  if (!clienteId){ showToast('⚠️ Selecciona un cliente'); return; }
+  if (!nombre){ showToast('⚠️ Escribe qué quiere comprar'); return; }
+
+  try{
+    setSync('busy');
+    await db.collection('pedidos').add({
+      clienteId, nombre, cantidad, costoAprox, comentarios,
+      foto: fotosPedido[0] || null, fotos: fotosPedido,
+      estado: 'pendiente',
+      fecha: new Date().toISOString(),
+    });
+    setSync('ok');
+    showToast('✅ Pedido guardado');
+    closeNuevoPedidoModal();
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo guardar. Revisa tu conexión.');
+  }
+}
+
+async function eliminarPedido(id){
+  if (soloAdmin()) return;
+  if (!confirm('¿Eliminar este pedido? No se puede deshacer.')) return;
+  try{
+    setSync('busy');
+    await db.collection('pedidos').doc(id).delete();
+    setSync('ok');
+    showToast('🗑️ Pedido eliminado');
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo eliminar.');
+  }
+}
+
+/* ---- Confirmar compra: convierte un pedido en una venta real ---- */
+let pedidoConfirmandoId = null;
+function abrirConfirmarPedidoComprado(id){
+  if (soloAdmin()) return;
+  const p = state.pedidos.find(x=>x.id===id);
+  if (!p) return;
+  const c = state.clientes.find(x=>x.id===p.clienteId);
+  pedidoConfirmandoId = id;
+
+  document.getElementById('cpClienteNombre').textContent = c ? c.nombre : 'Cliente eliminado';
+  document.getElementById('cpProductoNombre').textContent = p.nombre;
+  document.getElementById('cpCantidad').value = p.cantidad || 1;
+  document.getElementById('cpCostoUSD').value = '';
+  document.getElementById('cpTipoCambio').value = prefs.tipoCambio || DEFAULT_TIPO_CAMBIO;
+  document.getElementById('cpImpuesto').value = prefs.impuesto ?? DEFAULT_IMPUESTO;
+  document.getElementById('cpPrecio').value = p.costoAprox ? (p.costoAprox / (p.cantidad || 1)).toFixed(2) : '';
+  document.getElementById('cpCostoAproxRef').textContent = fmtMXN(p.costoAprox || 0);
+
+  const gruposOrdenados = [...state.grupos].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  const selGrupo = document.getElementById('cpGrupo');
+  selGrupo.innerHTML = '<option value="">— Selecciona un grupo —</option>' +
+    gruposOrdenados.map(g => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('');
+  selGrupo.value = '';
+
+  actualizarGananciaConfirmarPedido();
+  document.getElementById('modalConfirmarPedido').classList.add('show');
+  pushNavState('modalConfirmarPedido');
+}
+function closeConfirmarPedidoModal(){ document.getElementById('modalConfirmarPedido').classList.remove('show'); pedidoConfirmandoId = null; }
+function cambiarCantidadConfirmarPedido(delta){
+  const input = document.getElementById('cpCantidad');
+  input.value = Math.max(1, (parseInt(input.value) || 1) + delta);
+  actualizarGananciaConfirmarPedido();
+}
+function actualizarGananciaConfirmarPedido(){
+  const costoUSD = parseFloat(document.getElementById('cpCostoUSD').value) || 0;
+  const tipoCambio = parseFloat(document.getElementById('cpTipoCambio').value) || 0;
+  const impuestoPct = parseFloat(document.getElementById('cpImpuesto').value) || 0;
+  const precioUnit = parseFloat(document.getElementById('cpPrecio').value) || 0;
+  const cantidad = Math.max(1, parseInt(document.getElementById('cpCantidad').value) || 1);
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const costoTotal = (costoUnitMXN + costoUnitMXN * (impuestoPct/100)) * cantidad;
+  const precioTotal = precioUnit * cantidad;
+  const ganancia = precioTotal - costoTotal;
+  const el = document.getElementById('cpGananciaPreview');
+  el.textContent = fmtMXN(ganancia);
+  el.style.color = ganancia < 0 ? 'var(--danger)' : 'var(--profit)';
+}
+['cpCostoUSD','cpTipoCambio','cpImpuesto','cpPrecio'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', actualizarGananciaConfirmarPedido);
+});
+
+async function confirmarPedidoComprado(){
+  if (soloAdmin()) return;
+  if (!pedidoConfirmandoId) return;
+  const p = state.pedidos.find(x=>x.id===pedidoConfirmandoId);
+  if (!p) return;
+
+  const grupoId = document.getElementById('cpGrupo').value;
+  const cantidad = Math.max(1, parseInt(document.getElementById('cpCantidad').value) || 1);
+  const costoUSD = parseFloat(document.getElementById('cpCostoUSD').value) || 0;
+  const tipoCambio = parseFloat(document.getElementById('cpTipoCambio').value) || 0;
+  const impuestoPct = parseFloat(document.getElementById('cpImpuesto').value) || 0;
+  const precioUnit = parseFloat(document.getElementById('cpPrecio').value) || 0;
+
+  if (!grupoId){ showToast('⚠️ Selecciona a qué grupo se agrega'); return; }
+  if (!precioUnit){ showToast('⚠️ Falta el precio de venta'); return; }
+
+  const costoUnitMXN = costoUSD * tipoCambio;
+  const impuestoUnitMonto = costoUnitMXN * (impuestoPct / 100);
+  const costoTotal = (costoUnitMXN + impuestoUnitMonto) * cantidad;
+  const impuestoMonto = impuestoUnitMonto * cantidad;
+  const precioTotal = precioUnit * cantidad;
+  const ganancia = precioTotal - costoTotal;
+
+  const btn = document.getElementById('btnConfirmarPedido');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try{
+    setSync('busy');
+    const ventaRef = await db.collection('ventas').add({
+      nombre: p.nombre, categoria: 'Otro', foto: p.foto || null, fotos: p.fotos || [],
+      cantidad, comentarios: p.comentarios || '',
+      costoUSD, tipoCambio, impuestoPct, impuestoMonto,
+      precioUnitarioMXN: precioUnit,
+      costoMXN: costoTotal, precioMXN: precioTotal, ganancia,
+      clienteId: p.clienteId, grupoId,
+      fecha: new Date().toISOString(),
+    });
+    await db.collection('pedidos').doc(pedidoConfirmandoId).update({
+      estado: 'comprado', fechaComprado: new Date().toISOString(), ventaId: ventaRef.id,
+    });
+    setSync('ok');
+    showToast('✅ Venta registrada desde el pedido');
+    closeConfirmarPedidoModal();
+  }catch(e){
+    setSync('err');
+    showToast('⚠️ No se pudo completar. Revisa tu conexión.');
+  }finally{
+    btn.disabled = false; btn.textContent = '✅ Confirmar compra';
   }
 }
 
@@ -3375,7 +3795,7 @@ function iniciarApp(){
     renderListaLugaresAdmin();
     renderListaUsuariosAdmin();
     const activa = document.querySelector('.screen.active');
-    if (activa && activa.id === 'screenClientes') renderClientes();
+    if (activa && activa.id === 'screenClientes'){ renderClientes(); if (document.getElementById('tabPedidos').style.display !== 'none') renderPedidos(); }
     if (activa && activa.id === 'screenHistorial') renderHistorial();
     if (activa && activa.id === 'screenReportes'){ renderReportes(); renderGastosTab(); }
     if (activa && activa.id === 'screenDetalleCliente' && clienteDetalleId) verDetalleCliente(clienteDetalleId, true);
@@ -3397,6 +3817,7 @@ function iniciarApp(){
   listenersActivos.push(suscribir('lugares', 'lugares'));
   listenersActivos.push(suscribir('usuarios', 'usuarios'));
   listenersActivos.push(suscribir('gastos', 'gastos'));
+  listenersActivos.push(suscribir('pedidos', 'pedidos'));
 
   // Candado de respaldo semanal: escucha en tiempo real la configuración y
   // cuándo fue el último respaldo, y revisa cada minuto si ya toca bloquear.
